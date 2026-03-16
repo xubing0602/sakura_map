@@ -103,10 +103,19 @@ def parse_tags(soup: BeautifulSoup) -> str:
     return ", ".join(tags)
 
 
-def parse_status(soup: BeautifulSoup) -> Tuple[str, str]:
-    date_el = soup.find(class_=re.compile(r"kaikaStatus__date"))
-    title_el = soup.find(class_=re.compile(r"kaikaStatus__title"))
-    return _text(date_el), _text(title_el)
+
+
+def parse_status(soup) -> Tuple[str, str]:
+    date_el = soup.select_one(".kaikaStatus__date")
+    title_el = soup.select_one(".kaikaStatus__title")
+    
+    date_text = date_el.get_text(strip=True) if date_el else ""
+    title_text = title_el.get_text(strip=True) if title_el else ""
+    
+    clean_date = date_text.replace("最終取材日：", "")
+    clean_title = title_text
+    
+    return clean_date, clean_title
 
 
 def parse_kaika_list(soup: BeautifulSoup) -> Dict[str, str]:
@@ -131,8 +140,13 @@ def parse_spot_info(soup: BeautifulSoup) -> Dict[str, str]:
     def add_pair(key_el, val_el):
         key = _text(key_el)
         val = _text(val_el)
+        if val_el:
+            for btn in val_el.find_all(class_="button"):
+                    btn.decompose() # 彻底从 soup 树中移除该元素
+        key = _text(key_el)
+        val = _text(val_el)
         if key:
-            info[key] = val
+                info[key] = val
 
     if container:
         items = container.find_all(class_=re.compile(r"spotInfoList__item"))
@@ -164,17 +178,36 @@ def parse_spot_info(soup: BeautifulSoup) -> Dict[str, str]:
     return info
 
 
+# def parse_lat_lon(soup: BeautifulSoup) -> Tuple[str, str]:
+#     for a in soup.find_all("a", href=True):
+#         href = a["href"]
+#         print(f"Checking link for lat/lon: {href}")
+#         if "maps.google" not in href:
+#             continue
+#         match = re.search(r"[?&]q=([0-9.\-]+),([0-9.\-]+)", href)
+#         if match:
+#             # The page uses lat,lon ordering. The user requested `long` for the first value.
+#             return match.group(1), match.group(2)
+#     return "", ""
+
+
 def parse_lat_lon(soup: BeautifulSoup) -> Tuple[str, str]:
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
-        if "maps.google" not in href:
-            continue
+    gg_map_el = soup.find("a", id="gg_map", href=True)
+    
+    if gg_map_el:
+        href = gg_map_el["href"] 
         match = re.search(r"[?&]q=([0-9.\-]+),([0-9.\-]+)", href)
         if match:
-            # The page uses lat,lon ordering. The user requested `long` for the first value.
+            # group(1) 是纬度 (Lat), group(2) 是经度 (Lon)
             return match.group(1), match.group(2)
+            
     return "", ""
 
+def parse_homepage(soup: BeautifulSoup) -> str:
+    # 寻找 id 为 homepage 的链接
+    a = soup.find("a", id="homepage", href=True)
+    if a:
+        return a["href"]
 
 def parse_spot(html: str, url: str, ranking: Optional[int] = None) -> Dict[str, str]:
     soup = _soup(html)
@@ -184,8 +217,10 @@ def parse_spot(html: str, url: str, ranking: Optional[int] = None) -> Dict[str, 
     status_date, status = parse_status(soup)
     kaika = parse_kaika_list(soup)
     photo_text = parse_photo_text(soup)
+    lat_val, long_val = parse_lat_lon(soup)
+    homepage = parse_homepage(soup)
     info = parse_spot_info(soup)
-    long_val, lat_val = parse_lat_lon(soup)
+
 
     data: Dict[str, str] = {
         "area": area,
@@ -197,8 +232,9 @@ def parse_spot(html: str, url: str, ranking: Optional[int] = None) -> Dict[str, 
         "status_date": status_date,
         "status": status,
         "見どころ紹介": photo_text,
-        "long": long_val,
         "lat": lat_val,
+        "long": long_val,
+        "homepage": homepage,
     }
     data.update(kaika)
     data.update(info)
@@ -293,8 +329,9 @@ def write_csv(path: str, rows: List[Dict[str, str]], include_source_url: bool = 
         "満開",
         "桜吹雪",
         "見どころ紹介",
-        "long",
         "lat",
+        "long",
+        "homepage"
     ]
     if include_source_url and "source_url" not in base_fields:
         base_fields.append("source_url")
