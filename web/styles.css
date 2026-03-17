@@ -1,0 +1,245 @@
+:root {
+  --bg: #0e0f13;
+  --panel: #141824;
+  --panel-soft: rgba(20, 24, 36, 0.92);
+  --accent: #ff6b9a;
+  --accent-2: #5ae7ff;
+  --text: #f7f3f4;
+  --muted: #b7b3bd;
+  --chip: rgba(255, 255, 255, 0.12);
+  --shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", sans-serif;
+  color: var(--text);
+  background: radial-gradient(circle at top left, #21253b, #0e0f13 45%, #090a0c 100%);
+  height: 100vh;
+  overflow: hidden;
+}
+
+#app {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  height: 100vh;
+}
+
+.sidebar {
+  background: linear-gradient(160deg, rgba(25, 30, 45, 0.98), rgba(12, 14, 22, 0.92));
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 20px 18px 16px 22px;
+  overflow-y: auto;
+  position: relative;
+}
+
+.sidebar h1 {
+  font-family: "Cormorant Garamond", serif;
+  font-weight: 700;
+  margin: 0;
+  font-size: 26px;
+  letter-spacing: 0.5px;
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+}
+
+.sidebar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.icon-button {
+  border: none;
+  background: var(--chip);
+  color: var(--text);
+  font-size: 20px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.sidebar__section {
+  margin-bottom: 18px;
+}
+
+.sidebar__section h2 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--muted);
+}
+
+.filter-group {
+  display: grid;
+  gap: 8px;
+}
+
+.filter-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.filter-item input {
+  accent-color: var(--accent);
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#searchBox {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+#searchBox::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.chip {
+  background: var(--chip);
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.link-button {
+  border: none;
+  background: transparent;
+  color: var(--accent-2);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  margin: 8px 0 0;
+}
+
+.hidden {
+  display: none;
+}
+
+.range-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#rankingRange {
+  flex: 1;
+}
+
+.map-wrapper {
+  position: relative;
+}
+
+#map {
+  height: 100%;
+  width: 100%;
+}
+
+.map-overlay {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: var(--panel-soft);
+  padding: 10px 14px;
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar__footer {
+  font-size: 11px;
+  color: var(--muted);
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.info-card {
+  font-family: "Zen Kaku Gothic New", sans-serif;
+  color: #1a1a1a;
+  max-width: 340px;
+}
+
+.info-card img {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+
+.info-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 4px 0 6px;
+}
+
+.info-meta {
+  font-size: 12px;
+  color: #555;
+  margin-bottom: 8px;
+}
+
+.info-section {
+  margin-bottom: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.info-section strong {
+  color: #111;
+}
+
+@media (max-width: 960px) {
+  #app {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: absolute;
+    z-index: 10;
+    width: 100%;
+    max-width: 420px;
+    height: 100vh;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .map-wrapper {
+    grid-column: 1 / -1;
+  }
+}
