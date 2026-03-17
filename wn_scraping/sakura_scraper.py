@@ -7,6 +7,7 @@ from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
+from bs4.element import NavigableString, Tag
 
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -33,13 +34,31 @@ class AreaConfig:
     ranking_url: str
 
 
-def fetch_html(url: str, session: requests.Session, timeout: int = 20) -> str:
-    resp = session.get(url, headers={"User-Agent": USER_AGENT}, timeout=timeout)
-    resp.raise_for_status()
-    # Weathernews pages are usually UTF-8; apparent_encoding helps if headers are missing.
-    if resp.encoding:
-        resp.encoding = resp.apparent_encoding or resp.encoding
-    return resp.text
+def fetch_html(
+    url: str,
+    session: requests.Session,
+    timeout: int = 20,
+    max_retries: int = 3,
+    backoff: float = 1.5,
+) -> str:
+    last_err: Optional[Exception] = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = session.get(url, headers={"User-Agent": USER_AGENT}, timeout=timeout)
+            resp.raise_for_status()
+            # Weathernews pages are usually UTF-8; apparent_encoding helps if headers are missing.
+            if resp.encoding:
+                resp.encoding = resp.apparent_encoding or resp.encoding
+            return resp.text
+        except requests.RequestException as exc:
+            last_err = exc
+            if attempt < max_retries:
+                time.sleep(backoff * attempt)
+                continue
+            raise
+    if last_err:
+        raise last_err
+    raise RuntimeError(f"Failed to fetch {url}")
 
 
 def _soup(html: str) -> BeautifulSoup:
@@ -54,6 +73,26 @@ def _text(el) -> str:
 
 def _normalize_space(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
+
+
+def _clean_info_value(text: str) -> str:
+    # Remove auxiliary UI labels while preserving line breaks.
+    if not text:
+        return ""
+    lines = []
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped in {"地図を見る", "ホームページ"}:
+            continue
+        # Some pages leak bracket artifacts from embedded widgets.
+        if stripped in {"[", "]", "[]"}:
+            continue
+        if re.fullmatch(r"[\[\]]+", stripped):
+            continue
+        lines.append(line)
+    return "\n".join(lines).strip()
 
 
 def parse_breadcrumb(soup: BeautifulSoup) -> Tuple[str, str, str]:
@@ -138,15 +177,15 @@ def parse_spot_info(soup: BeautifulSoup) -> Dict[str, str]:
     container = soup.find(class_=re.compile(r"spotInfoList"))
 
     def add_pair(key_el, val_el):
-        key = _text(key_el)
-        val = _text(val_el)
         if val_el:
-            for btn in val_el.find_all(class_="button"):
-                    btn.decompose() # 彻底从 soup 树中移除该元素
-        key = _text(key_el)
-        val = _text(val_el)
+            for btn in val_el.select(".button"):
+                btn.decompose()
+            for a in val_el.find_all("a"):
+                a.decompose()
+        key = _normalize_space(_text(key_el))
+        val = _clean_info_value(_text(val_el))
         if key:
-                info[key] = val
+            info[key] = val
 
     if container:
         items = container.find_all(class_=re.compile(r"spotInfoList__item"))
@@ -175,6 +214,52 @@ def parse_spot_info(soup: BeautifulSoup) -> Dict[str, str]:
                 if dd:
                     add_pair(dt, dd)
 
+    if info:
+        return info
+
+    # Fallback: some pages render spot info as headings (e.g. h3) under "見どころ紹介".
+    section = None
+    for h in soup.find_all(["h2", "h3"]):
+        if "見どころ紹介" in _text(h):
+            section = h
+            break
+    if not section:
+        return info
+
+    current_key = None
+    buffer: List[str] = []
+
+    def flush():
+        nonlocal buffer, current_key
+        if current_key:
+            value = _clean_info_value("\n".join([b for b in buffer if b.strip()]))
+            if value:
+                info[current_key] = value
+        buffer = []
+
+    # Walk raw text nodes to avoid re-adding headings/containers multiple times.
+    for node in section.next_elements:
+        if node is section:
+            continue
+        if isinstance(node, Tag):
+            if node.name == "h2":
+                break
+            if node.name in ["h3", "h4"]:
+                flush()
+                current_key = _normalize_space(_text(node))
+                continue
+            # Skip non-content blocks
+            if node.name in ["script", "style", "noscript"]:
+                continue
+        elif isinstance(node, NavigableString):
+            if current_key:
+                if node.parent and getattr(node.parent, "name", None) in ["h3", "h4"]:
+                    continue
+                text = str(node).strip()
+                if text:
+                    buffer.append(text)
+
+    flush()
     return info
 
 
@@ -217,6 +302,7 @@ def parse_spot(html: str, url: str, ranking: Optional[int] = None) -> Dict[str, 
     status_date, status = parse_status(soup)
     kaika = parse_kaika_list(soup)
     photo_text = parse_photo_text(soup)
+    # take care that lat, long, homepage parsing should be before spot_info parsing, since some spot_info items may contain buttons that interfere with lat/long/homepage parsing
     lat_val, long_val = parse_lat_lon(soup)
     homepage = parse_homepage(soup)
     info = parse_spot_info(soup)

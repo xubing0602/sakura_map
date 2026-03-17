@@ -11,10 +11,10 @@ pip install -r requirements.txt
 ## Scrape One Spot
 
 ```bash
-python scripts/scrape_one_spot.py \
+python ./wn_scraping/scrape_one_spot.py \
   --url https://weathernews.jp/sakura/spot/106/ \
   --ranking-url https://weathernews.jp/sakura/area/tokyo/ranking.html \
-  --out spot.csv \
+  --out ./scraping/output/spot.csv \
   --include-source-url
 ```
 
@@ -23,17 +23,24 @@ python scripts/scrape_one_spot.py \
 All regions (default):
 
 ```bash
-python scripts/scrape_all_spots.py --out spots.csv
+python3 ./wn_scraping/scrape_all_spots.py \
+  --workers 6 \
+  --out ./scraping/output/wn_prefecture_spots.csv \
+  --resume \
+  --no-proxy \
+  --include-source-url
 ```
 
 Only specific small areas:
 
 ```bash
-python scripts/scrape_all_spots.py --areas tokyo,shiga --top 20 --out spots.csv
+python3 ./wn_scraping/scrape_all_spots.py \
+  --areas tokyo \
+  --top 20 \
+  --workers 6 \
+  --out ./scraping/output/wn_tokyo_spots.csv \
+  --resume \
+  --no-proxy \
+  --include-source-url
 ```
 
-Only specific big regions:
-
-```bash
-python scripts/scrape_all_spots.py --regions kanto,kinki --top 20 --out spots.csv
-```
