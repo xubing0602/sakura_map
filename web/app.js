@@ -2,18 +2,18 @@ const DATA_URL = "data/spots.json";
 const ICON_PATH = "status_icon/";
 const DEFAULT_CENTER = { lat: 36.5, lng: 138.0 };
 
-const ICON_FILES = [
-  "開花（5,6輪）.svg",
-  "ちらほら咲いた（1分咲き）.svg",
-  "満開（8分咲き）.svg",
-  "ピンクのつぼみ.svg",
-  "情報なし.svg",
-  "つぼみ.svg",
-  "満開間近（5分咲き）.svg",
-  "散り始め.svg",
-  "葉桜.svg",
-  "結構咲いた（3分咲き）.svg",
-];
+const STATUS_ICON_MAP = {
+  "つぼみ": "含苞.svg",
+  "ピンクのつぼみ": "粉色花苞.svg",
+  "開花(5,6輪)": "开花_五六轮.svg",
+  "ちらほら咲いた(1分咲き)": "初开_一分.svg",
+  "結構咲いた(3分咲き)": "开花_三分.svg",
+  "満開間近(5分咲き)": "近满开_五分.svg",
+  "満開(8分咲き)": "满开_八分.svg",
+  "散り始め": "凋落初期.svg",
+  "葉桜": "叶樱.svg",
+  "情報なし": "信息缺失.svg",
+};
 
 const PRIMARY_TAGS = ["夜桜", "桜並木", "ライトアップあり", "桜まつり開催"];
 
@@ -32,15 +32,13 @@ const state = {
   },
 };
 
-const iconMap = new Map();
-ICON_FILES.forEach((file) => {
-  const base = file.replace(/\.svg$/i, "").normalize("NFKC");
-  iconMap.set(base, file);
-});
+function normalizeStatus(status) {
+  return (status || "情報なし").trim().normalize("NFKC");
+}
 
 function buildIconUrl(status) {
-  const key = (status || "情報なし").trim().normalize("NFKC");
-  const file = iconMap.get(key) || iconMap.get("情報なし");
+  const key = normalizeStatus(status);
+  const file = STATUS_ICON_MAP[key] || STATUS_ICON_MAP["情報なし"];
   return `${ICON_PATH}${file}`;
 }
 
