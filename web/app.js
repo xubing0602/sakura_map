@@ -93,15 +93,109 @@ function uniqueSorted(values) {
   return Array.from(set).sort((a, b) => a.localeCompare(b, "ja"));
 }
 
+const AREA_ORDER = [
+  "北海道",
+  "東北",
+  "関東",
+  "中部",
+  "近畿",
+  "中国",
+  "四国",
+  "九州",
+];
+
+const PREFECTURE_ORDER = [
+  "道央",
+  "道南",
+  "道北",
+  "道東",
+  "北海道",
+  "青森",
+  "岩手",
+  "宮城",
+  "秋田",
+  "山形",
+  "福島",
+  "茨城",
+  "栃木",
+  "群馬",
+  "埼玉",
+  "千葉",
+  "東京",
+  "神奈川",
+  "新潟",
+  "富山",
+  "石川",
+  "福井",
+  "山梨",
+  "長野",
+  "岐阜",
+  "静岡",
+  "愛知",
+  "三重",
+  "滋賀",
+  "京都",
+  "大阪",
+  "兵庫",
+  "奈良",
+  "和歌山",
+  "鳥取",
+  "島根",
+  "岡山",
+  "広島",
+  "山口",
+  "徳島",
+  "香川",
+  "愛媛",
+  "高知",
+  "福岡",
+  "佐賀",
+  "長崎",
+  "熊本",
+  "大分",
+  "宮崎",
+  "鹿児島",
+  "沖縄",
+];
+
+const STATUS_ORDER = [
+  "つぼみ",
+  "ピンクのつぼみ",
+  "開花(5,6輪)",
+  "ちらほら咲いた(1分咲き)",
+  "結構咲いた(3分咲き)",
+  "満開間近(5分咲き)",
+  "満開(8分咲き)",
+  "散り始め",
+  "葉桜",
+  "情報なし",
+];
+
+function sortByOrder(values, order) {
+  const index = new Map(order.map((v, i) => [v, i]));
+  return values.slice().sort((a, b) => {
+    const ai = index.has(a) ? index.get(a) : 999;
+    const bi = index.has(b) ? index.get(b) : 999;
+    if (ai !== bi) return ai - bi;
+    return a.localeCompare(b, "ja");
+  });
+}
+
 function buildFilters(data) {
   const areaFilters = document.getElementById("areaFilters");
   const prefectureFilters = document.getElementById("prefectureFilters");
   const statusFilters = document.getElementById("statusFilters");
   const tagFilters = document.getElementById("tagFilters");
 
-  const areas = uniqueSorted(data.map((d) => d.area));
-  const prefectures = uniqueSorted(data.map((d) => d.prefecture));
-  const statuses = uniqueSorted(data.map((d) => d.status || "情報なし"));
+  const areas = sortByOrder(uniqueSorted(data.map((d) => d.area)), AREA_ORDER);
+  const prefectures = sortByOrder(
+    uniqueSorted(data.map((d) => d.prefecture)),
+    PREFECTURE_ORDER
+  );
+  const statuses = sortByOrder(
+    uniqueSorted(data.map((d) => d.status || "情報なし")),
+    STATUS_ORDER
+  );
   const tags = uniqueSorted(
     data.flatMap((d) => (d.tag_list && d.tag_list.length ? d.tag_list : []))
   );
