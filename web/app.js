@@ -15,7 +15,18 @@ const STATUS_ICON_MAP = {
   "情報なし": "信息缺失.svg",
 };
 
-const PRIMARY_TAGS = ["夜桜", "桜並木", "ライトアップあり", "桜まつり開催"];
+const STATUS_LABELS = {
+  "つぼみ": "含苞",
+  "ピンクのつぼみ": "粉色花苞",
+  "開花(5,6輪)": "开花（5-6朵）",
+  "ちらほら咲いた(1分咲き)": "初开（约1成）",
+  "結構咲いた(3分咲き)": "开花（约3成）",
+  "満開間近(5分咲き)": "近满开（约5成）",
+  "満開(8分咲き)": "满开（约8成）",
+  "散り始め": "开始凋落",
+  "葉桜": "叶樱",
+  "情報なし": "信息缺失",
+};
 
 const state = {
   data: [],
@@ -56,6 +67,27 @@ function createCheckbox(container, label, value, onChange, checked = false) {
   container.appendChild(wrapper);
 }
 
+function createStatusCheckbox(container, status, onChange) {
+  const wrapper = document.createElement("label");
+  wrapper.className = "filter-item";
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.value = status;
+  input.addEventListener("change", () => onChange(input));
+  const icon = document.createElement("img");
+  icon.src = buildIconUrl(status);
+  icon.alt = status;
+  icon.width = 22;
+  icon.height = 22;
+  icon.loading = "lazy";
+  icon.style.borderRadius = "6px";
+  const text = document.createElement("span");
+  const zh = STATUS_LABELS[status] ? ` - ${STATUS_LABELS[status]}` : "";
+  text.textContent = `${status}${zh}`;
+  wrapper.append(input, icon, text);
+  container.appendChild(wrapper);
+}
+
 function uniqueSorted(values) {
   const set = new Set(values.filter((v) => v));
   return Array.from(set).sort((a, b) => a.localeCompare(b, "ja"));
@@ -65,8 +97,7 @@ function buildFilters(data) {
   const areaFilters = document.getElementById("areaFilters");
   const prefectureFilters = document.getElementById("prefectureFilters");
   const statusFilters = document.getElementById("statusFilters");
-  const tagPrimary = document.getElementById("tagPrimary");
-  const tagMore = document.getElementById("tagMore");
+  const tagFilters = document.getElementById("tagFilters");
 
   const areas = uniqueSorted(data.map((d) => d.area));
   const prefectures = uniqueSorted(data.map((d) => d.prefecture));
@@ -74,8 +105,6 @@ function buildFilters(data) {
   const tags = uniqueSorted(
     data.flatMap((d) => (d.tag_list && d.tag_list.length ? d.tag_list : []))
   );
-
-  const extraTags = tags.filter((t) => !PRIMARY_TAGS.includes(t));
 
   areas.forEach((area) =>
     createCheckbox(areaFilters, area, area, (input) => {
@@ -90,19 +119,13 @@ function buildFilters(data) {
   );
 
   statuses.forEach((status) =>
-    createCheckbox(statusFilters, status, status, (input) => {
+    createStatusCheckbox(statusFilters, status, (input) => {
       toggleFilterSet(state.filters.statuses, input);
     })
   );
 
-  PRIMARY_TAGS.forEach((tag) =>
-    createCheckbox(tagPrimary, tag, tag, (input) => {
-      toggleFilterSet(state.filters.tags, input);
-    })
-  );
-
-  extraTags.forEach((tag) =>
-    createCheckbox(tagMore, tag, tag, (input) => {
+  tags.forEach((tag) =>
+    createCheckbox(tagFilters, tag, tag, (input) => {
       toggleFilterSet(state.filters.tags, input);
     })
   );
@@ -221,7 +244,7 @@ function initMap() {
       { elementType: "geometry", stylers: [{ color: "#20243a" }] },
       { elementType: "labels.text.stroke", stylers: [{ color: "#0b0d15" }] },
       { elementType: "labels.text.fill", stylers: [{ color: "#9fa8c3" }] },
-      { featureType: "poi", stylers: [{ visibility: "off" }] },
+      // { featureType: "poi", stylers: [{ visibility: "off" }] },
       { featureType: "road", elementType: "geometry", stylers: [{ color: "#394061" }] },
       { featureType: "water", elementType: "geometry", stylers: [{ color: "#151823" }] },
     ],
@@ -257,8 +280,6 @@ function setupUI() {
   const rankingRange = document.getElementById("rankingRange");
   const rankingValue = document.getElementById("rankingValue");
   const searchBox = document.getElementById("searchBox");
-  const toggleTags = document.getElementById("toggleTags");
-  const tagMore = document.getElementById("tagMore");
   const toggleSidebar = document.getElementById("toggleSidebar");
   const sidebar = document.getElementById("sidebar");
 
@@ -272,13 +293,6 @@ function setupUI() {
   searchBox.addEventListener("input", () => {
     state.filters.search = searchBox.value.trim();
     applyFilters();
-  });
-
-  toggleTags.addEventListener("click", () => {
-    tagMore.classList.toggle("hidden");
-    toggleTags.textContent = tagMore.classList.contains("hidden")
-      ? "他のタグを表示"
-      : "タグを折りたたむ";
   });
 
   toggleSidebar.addEventListener("click", () => {

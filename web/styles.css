@@ -1,13 +1,14 @@
 :root {
-  --bg: #0e0f13;
-  --panel: #141824;
-  --panel-soft: rgba(20, 24, 36, 0.92);
-  --accent: #ff6b9a;
-  --accent-2: #5ae7ff;
-  --text: #f7f3f4;
-  --muted: #b7b3bd;
-  --chip: rgba(255, 255, 255, 0.12);
-  --shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  --bg: #f6f4f1;
+  --panel: #ffffff;
+  --panel-soft: rgba(255, 255, 255, 0.96);
+  --accent: #ff4f8f;
+  --accent-2: #2aa8ff;
+  --text: #1e1a1c;
+  --muted: #6f6b75;
+  --chip: rgba(0, 0, 0, 0.06);
+  --shadow: 0 18px 40px rgba(15, 12, 20, 0.12);
+  --label: #d9417b;
 }
 
 * {
@@ -18,7 +19,7 @@ body {
   margin: 0;
   font-family: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", sans-serif;
   color: var(--text);
-  background: radial-gradient(circle at top left, #21253b, #0e0f13 45%, #090a0c 100%);
+  background: radial-gradient(circle at top left, #fff7fb, #f6f4f1 45%, #f1f5ff 100%);
   height: 100vh;
   overflow: hidden;
 }
@@ -30,9 +31,9 @@ body {
 }
 
 .sidebar {
-  background: linear-gradient(160deg, rgba(25, 30, 45, 0.98), rgba(12, 14, 22, 0.92));
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 20px 18px 16px 22px;
+  background: var(--panel);
+  border-right: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 22px 18px 16px 22px;
   overflow-y: auto;
   position: relative;
 }
@@ -48,7 +49,7 @@ body {
 .subtitle {
   margin: 4px 0 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.2em;
 }
@@ -66,8 +67,8 @@ body {
   background: var(--chip);
   color: var(--text);
   font-size: 20px;
-  padding: 6px 10px;
-  border-radius: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
   cursor: pointer;
 }
 
@@ -75,24 +76,57 @@ body {
   margin-bottom: 18px;
 }
 
-.sidebar__section h2 {
-  margin: 0 0 10px;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
+.filter-section {
+  margin-bottom: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 10px 12px 12px;
+  background: #fffdfb;
+}
+
+.filter-section summary {
+  list-style: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--label);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.filter-section summary::-webkit-details-marker {
+  display: none;
+}
+
+.filter-section summary::after {
+  content: "▾";
+  font-size: 12px;
   color: var(--muted);
+}
+
+.filter-section[open] summary::after {
+  content: "▴";
 }
 
 .filter-group {
   display: grid;
   gap: 8px;
+  margin-top: 10px;
+}
+
+.filter-scroll {
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 6px;
 }
 
 .filter-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  gap: 10px;
+  font-size: 14px;
 }
 
 .filter-item input {
@@ -107,37 +141,23 @@ body {
 
 #searchBox {
   flex: 1;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
   border-radius: 10px;
   padding: 10px 12px;
   color: var(--text);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 #searchBox::placeholder {
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(0, 0, 0, 0.35);
 }
 
 .chip {
   background: var(--chip);
   padding: 6px 10px;
   border-radius: 999px;
-  font-size: 12px;
-}
-
-.link-button {
-  border: none;
-  background: transparent;
-  color: var(--accent-2);
-  font-size: 12px;
-  cursor: pointer;
-  padding: 0;
-  margin: 8px 0 0;
-}
-
-.hidden {
-  display: none;
+  font-size: 13px;
 }
 
 .range-wrapper {
@@ -167,7 +187,7 @@ body {
   padding: 10px 14px;
   border-radius: 12px;
   box-shadow: var(--shadow);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
 }
 
@@ -178,46 +198,46 @@ body {
 }
 
 .sidebar__footer {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   padding-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .info-card {
   font-family: "Zen Kaku Gothic New", sans-serif;
   color: #1a1a1a;
-  max-width: 340px;
+  max-width: 360px;
 }
 
 .info-card img {
   width: 100%;
-  height: 160px;
+  height: 170px;
   object-fit: cover;
-  border-radius: 10px;
-  margin-bottom: 8px;
+  border-radius: 12px;
+  margin-bottom: 10px;
 }
 
 .info-title {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
   margin: 4px 0 6px;
 }
 
 .info-meta {
-  font-size: 12px;
+  font-size: 13px;
   color: #555;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .info-section {
-  margin-bottom: 6px;
-  font-size: 12px;
-  line-height: 1.4;
+  margin-bottom: 8px;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .info-section strong {
-  color: #111;
+  color: var(--label);
 }
 
 @media (max-width: 960px) {

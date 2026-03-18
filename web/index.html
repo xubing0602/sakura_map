@@ -32,35 +32,33 @@
           </div>
         </div>
 
-        <div class="sidebar__section">
-          <h2>地区</h2>
-          <div id="areaFilters" class="filter-group"></div>
-        </div>
+        <details class="filter-section" open>
+          <summary>地区</summary>
+          <div id="areaFilters" class="filter-group filter-scroll"></div>
+        </details>
 
-        <div class="sidebar__section">
-          <h2>都道府県</h2>
-          <div id="prefectureFilters" class="filter-group"></div>
-        </div>
+        <details class="filter-section" open>
+          <summary>都道府県</summary>
+          <div id="prefectureFilters" class="filter-group filter-scroll"></div>
+        </details>
 
-        <div class="sidebar__section">
-          <h2>特徴タグ</h2>
-          <div id="tagPrimary" class="filter-group"></div>
-          <button id="toggleTags" class="link-button">他のタグを表示</button>
-          <div id="tagMore" class="filter-group hidden"></div>
-        </div>
+        <details class="filter-section" open>
+          <summary>特徴タグ</summary>
+          <div id="tagFilters" class="filter-group filter-scroll"></div>
+        </details>
 
-        <div class="sidebar__section">
-          <h2>県内ランキング</h2>
+        <details class="filter-section" open>
+          <summary>県内ランキング</summary>
           <div class="range-wrapper">
             <input id="rankingRange" type="range" min="1" max="20" value="20" />
             <span id="rankingValue" class="chip">≤ 20</span>
           </div>
-        </div>
+        </details>
 
-        <div class="sidebar__section">
-          <h2>開花状態</h2>
-          <div id="statusFilters" class="filter-group"></div>
-        </div>
+        <details class="filter-section" open>
+          <summary>開花状態</summary>
+          <div id="statusFilters" class="filter-group filter-scroll"></div>
+        </details>
 
         <div class="sidebar__section sidebar__footer">
           <p>データ: weathernews.jp</p>
