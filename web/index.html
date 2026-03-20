@@ -19,8 +19,8 @@
       <aside id="sidebar" class="sidebar">
         <div class="sidebar__header">
           <div>
-            <h1>WN Sakura Map　🌸</h1>
-            <p class="subtitle">Weathernews さくら名所</p>
+            <h1>Sakura Map　🌸</h1>
+            <p class="subtitle">さくら名所</p>
           </div>
           <button id="toggleSidebar" class="icon-button" aria-label="Toggle sidebar">
             ≡
@@ -45,6 +45,11 @@
         </details>
 
         <details class="filter-section" open>
+          <summary>開花状況</summary>
+          <div id="statusFilters" class="filter-group filter-scroll"></div>
+        </details>
+
+        <details class="filter-section" open>
           <summary>特徴タグ</summary>
           <div id="tagFilters" class="filter-group filter-scroll"></div>
         </details>
@@ -57,10 +62,7 @@
           </div>
         </details>
 
-        <details class="filter-section" open>
-          <summary>開花状態</summary>
-          <div id="statusFilters" class="filter-group filter-scroll"></div>
-        </details>
+
 
         <div class="sidebar__section sidebar__footer">
           <p>データ: weathernews.jp</p>
@@ -69,9 +71,32 @@
 
       <main class="map-wrapper">
         <div id="map"></div>
+        <div class="map-toolbar">
+          <div class="tab-group" role="tablist" aria-label="Map tabs">
+            <button class="tab-button is-active" data-mode="current" role="tab" aria-selected="true">
+              現在の状況
+            </button>
+            <button class="tab-button" data-mode="forecast" role="tab" aria-selected="false">
+              桜レーダー
+            </button>
+          </div>
+          <div id="forecastControls" class="forecast-controls is-hidden" aria-hidden="true">
+            <div class="timeline">
+              <div class="timeline-row">
+                <span class="timeline-label">タイムライン</span>
+                <span id="forecastDateLabel" class="timeline-date">03/17</span>
+              </div>
+              <input id="forecastRange" type="range" min="0" max="0" value="0" />
+              <div class="timeline-hint">
+                <span id="forecastStartLabel">03/17</span>
+                <span id="forecastEndLabel">05/30</span>
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="map-overlay">
           <div class="legend">
-            <span>ステータス別アイコン表示</span>
+            <span id="legendLabel">ステータス別アイコン表示</span>
           </div>
         </div>
       </main>

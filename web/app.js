@@ -1,6 +1,9 @@
 const DATA_URL = "data/spots.json";
 const ICON_PATH = "status_icon/";
 const DEFAULT_CENTER = { lat: 36.5, lng: 138.0 };
+const FORECAST_START = { month: 3, day: 17 };
+const FORECAST_END = { month: 5, day: 30 };
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const STATUS_ICON_MAP = {
   "つぼみ": "含苞.svg",
@@ -28,11 +31,30 @@ const STATUS_LABELS = {
   "情報なし": "信息缺失",
 };
 
+const FORECAST_STATUS_LIST = [
+  "つぼみ",
+  "開花(5,6輪)",
+  "満開間近(5分咲き)",
+  "満開(8分咲き)",
+  "散り始め",
+  "葉桜",
+  "情報なし",
+];
+
 const state = {
   data: [],
   map: null,
   infoWindow: null,
+  infoItem: null,
   markers: [],
+  mode: "current",
+  forecast: {
+    year: new Date().getFullYear(),
+    dates: [],
+    index: 0,
+    startDate: null,
+    endDate: null,
+  },
   filters: {
     areas: new Set(),
     prefectures: new Set(),
@@ -51,6 +73,51 @@ function buildIconUrl(status) {
   const key = normalizeStatus(status);
   const file = STATUS_ICON_MAP[key] || STATUS_ICON_MAP["情報なし"];
   return `${ICON_PATH}${file}`;
+}
+
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+function createDate(year, month, day) {
+  return new Date(year, month - 1, day, 12, 0, 0);
+}
+
+function parseJpMonthDay(value, year) {
+  if (!value) return null;
+  const match = String(value).match(/(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
+  if (!match) return null;
+  const month = parseInt(match[1], 10);
+  const day = parseInt(match[2], 10);
+  if (!Number.isFinite(month) || !Number.isFinite(day)) return null;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return createDate(year, month, day);
+}
+
+function buildForecastDates(year) {
+  const startDate = createDate(year, FORECAST_START.month, FORECAST_START.day);
+  const endDate = createDate(year, FORECAST_END.month, FORECAST_END.day);
+  const dates = [];
+  for (let t = startDate.getTime(); t <= endDate.getTime(); t += DAY_MS) {
+    dates.push(new Date(t));
+  }
+  return { dates, startDate, endDate };
+}
+
+function formatMonthDay(date) {
+  return `${pad2(date.getMonth() + 1)}/${pad2(date.getDate())}`;
+}
+
+function addDays(date, days) {
+  return new Date(date.getTime() + days * DAY_MS);
+}
+
+function isBefore(a, b) {
+  return a.getTime() < b.getTime();
+}
+
+function isAfter(a, b) {
+  return a.getTime() > b.getTime();
 }
 
 function createCheckbox(container, label, value, onChange, checked = false) {
@@ -181,6 +248,52 @@ function sortByOrder(values, order) {
   });
 }
 
+function initForecast() {
+  const { dates, startDate, endDate } = buildForecastDates(state.forecast.year);
+  state.forecast.dates = dates;
+  state.forecast.startDate = startDate;
+  state.forecast.endDate = endDate;
+  state.forecast.index = 0;
+}
+
+function getForecastStatus(item, date) {
+  const year = state.forecast.year;
+  const open = parseJpMonthDay(item["開花予想日"], year);
+  const half = parseJpMonthDay(item["五分咲き"], year);
+  const full = parseJpMonthDay(item["満開"], year);
+  const shower = parseJpMonthDay(item["桜吹雪"], year);
+
+  if (!open && !half && !full && !shower) return "情報なし";
+
+  const start = state.forecast.startDate;
+  const openStart = open || (half || full || shower ? start : null);
+  const halfStart = half || (full || shower ? (openStart || start) : null);
+  const fullStart = full || (shower ? (halfStart || openStart || start) : null);
+
+  if (openStart && isBefore(date, openStart)) return "つぼみ";
+  if (halfStart && isBefore(date, halfStart)) return "開花(5,6輪)";
+  if (fullStart && isBefore(date, fullStart)) return "満開間近(5分咲き)";
+
+  if (shower) {
+    if (isBefore(date, shower)) return "満開(8分咲き)";
+    const showerEnd = addDays(shower, 6);
+    if (!isAfter(date, showerEnd)) return "散り始め";
+    return "葉桜";
+  }
+
+  if (fullStart) return "満開(8分咲き)";
+  if (halfStart) return "満開間近(5分咲き)";
+  return "開花(5,6輪)";
+}
+
+function getDisplayStatus(item) {
+  if (state.mode === "forecast") {
+    const date = state.forecast.dates[state.forecast.index];
+    if (date) return getForecastStatus(item, date);
+  }
+  return item.status || "情報なし";
+}
+
 function buildFilters(data) {
   const areaFilters = document.getElementById("areaFilters");
   const prefectureFilters = document.getElementById("prefectureFilters");
@@ -193,7 +306,11 @@ function buildFilters(data) {
     PREFECTURE_ORDER
   );
   const statuses = sortByOrder(
-    uniqueSorted(data.map((d) => d.status || "情報なし")),
+    uniqueSorted(
+      data
+        .map((d) => d.status || "情報なし")
+        .concat(FORECAST_STATUS_LIST)
+    ),
     STATUS_ORDER
   );
   const tags = uniqueSorted(
@@ -245,7 +362,7 @@ function matchesFilters(item) {
   if (areas.size && !areas.has(item.area)) return false;
   if (prefectures.size && !prefectures.has(item.prefecture)) return false;
 
-  const statusValue = item.status || "情報なし";
+  const statusValue = getDisplayStatus(item);
   if (statuses.size && !statuses.has(statusValue)) return false;
 
   if (tags.size) {
@@ -281,6 +398,75 @@ function applyFilters() {
   countEl.textContent = visibleCount;
 }
 
+function updateMarkerIcons() {
+  state.markers.forEach(({ marker, item }) => {
+    const status = getDisplayStatus(item);
+    marker.setIcon({
+      url: buildIconUrl(status),
+      scaledSize: new google.maps.Size(34, 34),
+    });
+  });
+}
+
+function updateLegend() {
+  const label = document.getElementById("legendLabel");
+  if (!label) return;
+  if (state.mode === "forecast") {
+    const date = state.forecast.dates[state.forecast.index];
+    label.textContent = date
+      ? `予想日 ${formatMonthDay(date)} の状況`
+      : "予想アイコン表示";
+  } else {
+    label.textContent = "ステータス別アイコン表示";
+  }
+}
+
+function updateInfoWindow() {
+  if (!state.infoWindow || !state.infoItem) return;
+  if (!state.infoWindow.getMap()) return;
+  state.infoWindow.setContent(buildInfoContent(state.infoItem));
+}
+
+function updateTabButtons() {
+  document.querySelectorAll(".tab-button").forEach((button) => {
+    const isActive = button.dataset.mode === state.mode;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-selected", isActive ? "true" : "false");
+  });
+}
+
+function updateForecastUI() {
+  const controls = document.getElementById("forecastControls");
+  const range = document.getElementById("forecastRange");
+  const dateLabel = document.getElementById("forecastDateLabel");
+  const startLabel = document.getElementById("forecastStartLabel");
+  const endLabel = document.getElementById("forecastEndLabel");
+  if (!controls || !range || !dateLabel || !startLabel || !endLabel) return;
+
+  const isForecast = state.mode === "forecast";
+  controls.classList.toggle("is-hidden", !isForecast);
+  controls.setAttribute("aria-hidden", String(!isForecast));
+
+  const date = state.forecast.dates[state.forecast.index];
+  if (date) {
+    dateLabel.textContent = formatMonthDay(date);
+  }
+  range.value = String(state.forecast.index);
+  startLabel.textContent = formatMonthDay(state.forecast.startDate);
+  endLabel.textContent = formatMonthDay(state.forecast.endDate);
+}
+
+function setMode(mode) {
+  if (state.mode === mode) return;
+  state.mode = mode;
+  updateTabButtons();
+  updateForecastUI();
+  updateMarkerIcons();
+  applyFilters();
+  updateLegend();
+  updateInfoWindow();
+}
+
 function buildInfoContent(item) {
   const escape = (text) =>
     (text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -288,12 +474,21 @@ function buildInfoContent(item) {
     if (!value) return "";
     return `<div class="info-section"><strong>${label}</strong><div>${escape(value).replace(/\n/g, "<br>")}</div></div>`;
   };
+  const displayStatus = getDisplayStatus(item);
+  const forecastDate =
+    state.mode === "forecast" ? state.forecast.dates[state.forecast.index] : null;
+  const meta =
+    state.mode === "forecast"
+      ? `予想ステータス ${escape(displayStatus)} ｜ ${
+          forecastDate ? formatMonthDay(forecastDate) : "-"
+        }`
+      : `${escape(item.status || "情報なし")} ｜ 最終取材日 ${escape(item.status_date || "-")}`;
 
   return `
     <div class="info-card">
       ${item.img ? `<img src="${item.img}" alt="${escape(item.place)}" />` : ""}
       <div class="info-title">${escape(item.place || "")}</div>
-      <div class="info-meta">${escape(item.status || "情報なし")} ｜ 最終取材日 ${escape(item.status_date || "-")}</div>
+      <div class="info-meta">${meta}</div>
       ${line("開花予想日", item["開花予想日"])}
       ${line("五分咲き", item["五分咲き"])}
       ${line("満開", item["満開"])}
@@ -353,13 +548,14 @@ function initMap() {
       position: { lat, lng },
       map: state.map,
       icon: {
-        url: buildIconUrl(item.status),
+        url: buildIconUrl(getDisplayStatus(item)),
         scaledSize: new google.maps.Size(34, 34),
       },
       title: item.place || "",
     });
 
     marker.addListener("click", () => {
+      state.infoItem = item;
       state.infoWindow.setContent(buildInfoContent(item));
       state.infoWindow.open({ map: state.map, anchor: marker });
     });
@@ -371,11 +567,14 @@ function initMap() {
 }
 
 function setupUI() {
+  initForecast();
+
   const rankingRange = document.getElementById("rankingRange");
   const rankingValue = document.getElementById("rankingValue");
   const searchBox = document.getElementById("searchBox");
   const toggleSidebar = document.getElementById("toggleSidebar");
   const sidebar = document.getElementById("sidebar");
+  const forecastRange = document.getElementById("forecastRange");
 
   rankingRange.addEventListener("input", () => {
     const value = parseInt(rankingRange.value, 10);
@@ -392,6 +591,30 @@ function setupUI() {
   toggleSidebar.addEventListener("click", () => {
     sidebar.classList.toggle("open");
   });
+
+  if (forecastRange) {
+    forecastRange.max = String(Math.max(state.forecast.dates.length - 1, 0));
+    forecastRange.value = "0";
+    forecastRange.addEventListener("input", () => {
+      const value = parseInt(forecastRange.value, 10);
+      state.forecast.index = Number.isFinite(value) ? value : 0;
+      updateForecastUI();
+      updateMarkerIcons();
+      applyFilters();
+      updateLegend();
+      updateInfoWindow();
+    });
+  }
+
+  document.querySelectorAll(".tab-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      setMode(button.dataset.mode || "current");
+    });
+  });
+
+  updateTabButtons();
+  updateForecastUI();
+  updateLegend();
 }
 
 function loadGoogleMaps() {
