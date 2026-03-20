@@ -65,6 +65,11 @@ const state = {
   },
 };
 
+const filterCountEls = {
+  statuses: new Map(),
+  tags: new Map(),
+};
+
 function normalizeStatus(status) {
   return (status || "情報なし").trim().normalize("NFKC");
 }
@@ -151,7 +156,28 @@ function createStatusCheckbox(container, status, onChange) {
   const text = document.createElement("span");
   const zh = STATUS_LABELS[status] ? ` - ${STATUS_LABELS[status]}` : "";
   text.textContent = `${status}${zh}`;
-  wrapper.append(input, icon, text);
+  const count = document.createElement("span");
+  count.className = "filter-count";
+  count.textContent = "(0)";
+  filterCountEls.statuses.set(status, count);
+  wrapper.append(input, icon, text, count);
+  container.appendChild(wrapper);
+}
+
+function createTagCheckbox(container, tag, onChange) {
+  const wrapper = document.createElement("label");
+  wrapper.className = "filter-item";
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.value = tag;
+  input.addEventListener("change", () => onChange(input));
+  const text = document.createElement("span");
+  text.textContent = tag;
+  const count = document.createElement("span");
+  count.className = "filter-count";
+  count.textContent = "(0)";
+  filterCountEls.tags.set(tag, count);
+  wrapper.append(input, text, count);
   container.appendChild(wrapper);
 }
 
@@ -336,7 +362,7 @@ function buildFilters(data) {
   );
 
   tags.forEach((tag) =>
-    createCheckbox(tagFilters, tag, tag, (input) => {
+    createTagCheckbox(tagFilters, tag, (input) => {
       toggleFilterSet(state.filters.tags, input);
     })
   );
@@ -384,6 +410,38 @@ function matchesFilters(item) {
   return true;
 }
 
+function matchesFiltersExcept(item, exclude) {
+  const { areas, prefectures, statuses, tags, rankingMax, search } = state.filters;
+
+  if (areas.size && !areas.has(item.area)) return false;
+  if (prefectures.size && !prefectures.has(item.prefecture)) return false;
+
+  if (exclude !== "status") {
+    const statusValue = getDisplayStatus(item);
+    if (statuses.size && !statuses.has(statusValue)) return false;
+  }
+
+  if (exclude !== "tag") {
+    if (tags.size) {
+      const tagSet = new Set(item.tag_list || []);
+      const hasAny = Array.from(tags).some((tag) => tagSet.has(tag));
+      if (!hasAny) return false;
+    }
+  }
+
+  const rank = parseInt(item.prefecture_ranking || "", 10);
+  const rankOk = Number.isFinite(rank) ? rank <= rankingMax : rankingMax === 20;
+  if (!rankOk) return false;
+
+  if (search) {
+    const term = search.toLowerCase();
+    const hay = `${item.place || ""}${item.prefecture || ""}${item.area || ""}`.toLowerCase();
+    if (!hay.includes(term)) return false;
+  }
+
+  return true;
+}
+
 function applyFilters() {
   const filtered = state.data.filter(matchesFilters);
 
@@ -396,6 +454,36 @@ function applyFilters() {
 
   const countEl = document.getElementById("resultCount");
   countEl.textContent = visibleCount;
+
+  updateFilterCounts();
+}
+
+function updateFilterCounts() {
+  if (!state.data.length) return;
+
+  const statusCounts = new Map();
+  const tagCounts = new Map();
+
+  state.data.forEach((item) => {
+    if (matchesFiltersExcept(item, "status")) {
+      const statusValue = getDisplayStatus(item);
+      statusCounts.set(statusValue, (statusCounts.get(statusValue) || 0) + 1);
+    }
+
+    if (matchesFiltersExcept(item, "tag")) {
+      (item.tag_list || []).forEach((tag) => {
+        tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+      });
+    }
+  });
+
+  filterCountEls.statuses.forEach((el, status) => {
+    el.textContent = `(${statusCounts.get(status) || 0})`;
+  });
+
+  filterCountEls.tags.forEach((el, tag) => {
+    el.textContent = `(${tagCounts.get(tag) || 0})`;
+  });
 }
 
 function updateMarkerIcons() {
@@ -575,6 +663,7 @@ function setupUI() {
   const toggleSidebar = document.getElementById("toggleSidebar");
   const sidebar = document.getElementById("sidebar");
   const forecastRange = document.getElementById("forecastRange");
+  const resetFilters = document.getElementById("resetFilters");
 
   rankingRange.addEventListener("input", () => {
     const value = parseInt(rankingRange.value, 10);
@@ -591,6 +680,31 @@ function setupUI() {
   toggleSidebar.addEventListener("click", () => {
     sidebar.classList.toggle("open");
   });
+
+  if (resetFilters) {
+    resetFilters.addEventListener("click", () => {
+      state.filters.areas.clear();
+      state.filters.prefectures.clear();
+      state.filters.statuses.clear();
+      state.filters.tags.clear();
+      state.filters.rankingMax = 20;
+      state.filters.search = "";
+
+      document
+        .querySelectorAll(
+          "#areaFilters input[type='checkbox'], #prefectureFilters input[type='checkbox'], #statusFilters input[type='checkbox'], #tagFilters input[type='checkbox']"
+        )
+        .forEach((input) => {
+          input.checked = false;
+        });
+
+      if (searchBox) searchBox.value = "";
+      if (rankingRange) rankingRange.value = "20";
+      if (rankingValue) rankingValue.textContent = "≤ 20";
+
+      applyFilters();
+    });
+  }
 
   if (forecastRange) {
     forecastRange.max = String(Math.max(state.forecast.dates.length - 1, 0));
