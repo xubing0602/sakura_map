@@ -677,8 +677,17 @@ function setupUI() {
     applyFilters();
   });
 
+  const showSidebar = document.getElementById("showSidebar");
+  const app = document.getElementById("app");
+
   toggleSidebar.addEventListener("click", () => {
     sidebar.classList.toggle("open");
+    app.classList.toggle("sidebar-hidden", !sidebar.classList.contains("open"));
+  });
+
+  showSidebar.addEventListener("click", () => {
+    sidebar.classList.add("open");
+    app.classList.remove("sidebar-hidden");
   });
 
   if (resetFilters) {

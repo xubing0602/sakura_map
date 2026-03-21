@@ -233,6 +233,9 @@ def main() -> None:
             row.pop("source_url", None)
     write_csv(args.out, rows, include_source_url=args.include_source_url)
     print(f"Wrote {len(rows)} rows to {args.out}")
+    # remove jsonl file as the job is done
+    if checkpoint_path.exists():
+        checkpoint_path.unlink()
 
 
 if __name__ == "__main__":
