@@ -2,7 +2,7 @@ const DATA_URL = "data/spots.json";
 const ICON_PATH = "status_icon/";
 const DEFAULT_CENTER = { lat: 36.5, lng: 138.0 };
 const FORECAST_START = { month: 3, day: 17 };
-const FORECAST_END = { month: 5, day: 30 };
+const FORECAST_END = { month: 5, day: 24 };
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const STATUS_ICON_MAP = {
