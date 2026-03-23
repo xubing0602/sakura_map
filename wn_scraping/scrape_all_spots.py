@@ -231,11 +231,39 @@ def main() -> None:
     if not args.include_source_url:
         for row in rows:
             row.pop("source_url", None)
-    write_csv(args.out, rows, include_source_url=args.include_source_url)
-    print(f"Wrote {len(rows)} rows to {args.out}")
+    write_csv(csv_path, rows, include_source_url=args.include_source_url)
+    print(f"Wrote {len(rows)} rows to {csv_path}")
     # remove jsonl file as the job is done
     if checkpoint_path.exists():
         checkpoint_path.unlink()
+
+
+    import csv, json
+    import datetime
+    import os
+    import glob
+    import shutil
+
+    date_str = datetime.datetime.now().strftime('%Y%m%d')
+    csv_path = f'wn_scraping/output/wn_prefecture_spots_{date_str}.csv'
+    json_path = f'web/data/spots_{date_str}.json'
+
+    rows = []
+    with open(csv_path, encoding='utf-8-sig') as f:
+        for row in csv.DictReader(f):
+            tag = row.get('tag', '') or ''
+            row['tag_list'] = [t.strip() for t in tag.split(',') if t.strip()]
+            rows.append(row)
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(rows, f, ensure_ascii=False)
+    print('wrote', len(rows))
+
+    # Update spots.json and previous.json
+    spots_files = sorted(glob.glob('web/data/spots_*.json'), key=os.path.getmtime, reverse=True)
+    if len(spots_files) > 1:
+        shutil.copy(spots_files[1], 'web/data/previous.json')
+    shutil.copy(json_path, 'web/data/spots.json')
+    print('Updated spots.json and previous.json')
 
 
 if __name__ == "__main__":

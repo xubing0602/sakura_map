@@ -1,4 +1,5 @@
 const DATA_URL = "data/spots.json";
+const PREVIOUS_DATA_URL = "data/previous.json";
 const ICON_PATH = "status_icon/";
 const DEFAULT_CENTER = { lat: 36.5, lng: 138.0 };
 const FORECAST_START = { month: 3, day: 17 };
@@ -63,6 +64,7 @@ const state = {
     rankingMax: 20,
     search: "",
   },
+  previousData: null,
 };
 
 const filterCountEls = {
@@ -181,9 +183,20 @@ function createTagCheckbox(container, tag, onChange) {
   container.appendChild(wrapper);
 }
 
-function uniqueSorted(values) {
-  const set = new Set(values.filter((v) => v));
-  return Array.from(set).sort((a, b) => a.localeCompare(b, "ja"));
+function getDateDiff(current, previous, year) {
+  if (!current || !previous) return null;
+  const currDate = parseJpMonthDay(current, year);
+  const prevDate = parseJpMonthDay(previous, year);
+  if (!currDate || !prevDate) return null;
+  const diffMs = currDate.getTime() - prevDate.getTime();
+  const diffDays = Math.round(diffMs / DAY_MS);
+  if (diffDays === 0) return 0;
+  return diffDays;
+}
+
+function findPrevItem(currentItem) {
+  if (!state.previousData) return null;
+  return state.previousData.find((p) => p.place === currentItem.place) || null;
 }
 
 const AREA_ORDER = [
@@ -279,7 +292,27 @@ function initForecast() {
   state.forecast.dates = dates;
   state.forecast.startDate = startDate;
   state.forecast.endDate = endDate;
-  state.forecast.index = 0;
+
+  const now = new Date();
+  const today = createDate(state.forecast.year, now.getMonth() + 1, now.getDate());
+
+  if (today <= startDate) {
+    state.forecast.index = 0;
+  } else if (today >= endDate) {
+    state.forecast.index = dates.length - 1;
+  } else {
+    // Find the closest date index to today
+    let bestIndex = 0;
+    let bestDiff = Infinity;
+    dates.forEach((date, i) => {
+      const diff = Math.abs(date.getTime() - today.getTime());
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestIndex = i;
+      }
+    });
+    state.forecast.index = bestIndex;
+  }
 }
 
 function getForecastStatus(item, date) {
@@ -318,6 +351,11 @@ function getDisplayStatus(item) {
     if (date) return getForecastStatus(item, date);
   }
   return item.status || "情報なし";
+}
+
+function uniqueSorted(values) {
+  const set = new Set(values.filter((v) => v));
+  return Array.from(set).sort((a, b) => a.localeCompare(b, "ja"));
 }
 
 function buildFilters(data) {
@@ -562,6 +600,12 @@ function buildInfoContent(item) {
     if (!value) return "";
     return `<div class="info-section"><strong>${label}</strong><div>${escape(value).replace(/\n/g, "<br>")}</div></div>`;
   };
+  const dateLine = (label, value, prevValue) => {
+    if (!value) return "";
+    const diff = prevValue ? getDateDiff(value, prevValue, state.forecast.year) : null;
+    const diffStr = diff !== null ? ` (${diff > 0 ? '+' : ''}${diff} 日)` : '';
+    return `<div class="info-section"><strong>${label}</strong><div>${escape(value)}${diffStr}</div></div>`;
+  };
   const displayStatus = getDisplayStatus(item);
   const forecastDate =
     state.mode === "forecast" ? state.forecast.dates[state.forecast.index] : null;
@@ -572,17 +616,19 @@ function buildInfoContent(item) {
         }`
       : `${escape(item.status || "情報なし")} ｜ 最終取材日 ${escape(item.status_date || "-")}`;
 
+  const prevItem = findPrevItem(item);
+
   return `
     <div class="info-card">
       ${item.img ? `<img src="${item.img}" alt="${escape(item.place)}" />` : ""}
       <div class="info-title">${escape(item.place || "")}</div>
       <div class="info-meta">${meta}</div>
-      ${line("開花予想日", item["開花予想日"])}
-      ${line("五分咲き", item["五分咲き"])}
-      ${line("満開", item["満開"])}
-      ${line("桜吹雪", item["桜吹雪"])}
+      ${dateLine("開花予想日", item["開花予想日"], prevItem ? prevItem["開花予想日"] : null)}
+      ${dateLine("五分咲き", item["五分咲き"], prevItem ? prevItem["五分咲き"] : null)}
+      ${dateLine("満開", item["満開"], prevItem ? prevItem["満開"] : null)}
+      ${dateLine("桜吹雪", item["桜吹雪"], prevItem ? prevItem["桜吹雪"] : null)}
       ${line("例年の見頃", item["例年の見頃"])}
-      ${line("WN県内ランキング", item["prefecture_ranking"])}
+      ${line("県内ランキング", item["prefecture_ranking"])}
       ${line("桜の種類", item["桜の種類"])}
       ${line("桜の本数", item["桜の本数"])}
       ${line("見どころ紹介", item["見どころ紹介"])}
@@ -602,13 +648,23 @@ function buildInfoContent(item) {
 }
 
 async function loadData() {
-  const res = await fetch(DATA_URL);
-  const data = await res.json();
-  state.data = data.filter((item) => {
+  const currentRes = await fetch(DATA_URL);
+  const currentData = await currentRes.json();
+  state.data = currentData.filter((item) => {
     const lat = toNumber(item.lat);
     const lng = toNumber(item.long);
     return lat !== null && lng !== null;
   });
+
+  // Try to load previous data
+  try {
+    const previousRes = await fetch(PREVIOUS_DATA_URL);
+    const previousData = await previousRes.json();
+    state.previousData = previousData;
+  } catch {
+    state.previousData = null;
+  }
+
   buildFilters(state.data);
   return state.data;
 }
