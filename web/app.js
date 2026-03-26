@@ -34,13 +34,38 @@ const STATUS_LABELS = {
 
 const FORECAST_STATUS_LIST = [
   "つぼみ",
+  "ピンクのつぼみ",
   "開花(5,6輪)",
+  "ちらほら咲いた(1分咲き)",
+  "結構咲いた(3分咲き)",
   "満開間近(5分咲き)",
   "満開(8分咲き)",
   "散り始め",
   "葉桜",
   "情報なし",
 ];
+
+const STATUS_COLORS = {
+  "つぼみ": "#f7c1d9",
+  "ピンクのつぼみ": "#f8a6c8",
+  "開花(5,6輪)": "#f59abf",
+  "ちらほら咲いた(1分咲き)": "#f07cb0",
+  "結構咲いた(3分咲き)": "#e85c9d",
+  "満開間近(5分咲き)": "#f26f9f",
+  "満開(8分咲き)": "#d9417b",
+  "散り始め": "#ff9f6e",
+  "葉桜": "#6fbf7f",
+  "情報なし": "#bfc3c7",
+};
+
+const HISTORICAL_DEFAULTS = {
+  enabled: true,
+  prefer: "auto", // auto | json | csv | none
+  jsonPath: "data/spots_{date}.json",
+  csvPath: "../wn_scraping/output/wn_prefecture_spots_{date}.csv",
+  cutoff: "today",
+  fallbackToForecast: true,
+};
 
 const state = {
   data: [],
@@ -55,6 +80,15 @@ const state = {
     index: 0,
     startDate: null,
     endDate: null,
+  },
+  viz: {
+    series: null,
+    signature: "",
+  },
+  historical: {
+    cutoff: null,
+    cache: new Map(),
+    loading: new Map(),
   },
   filters: {
     areas: new Set(),
@@ -82,12 +116,44 @@ function buildIconUrl(status) {
   return `${ICON_PATH}${file}`;
 }
 
+function mergeConfig(base, override = {}) {
+  const output = { ...base };
+  Object.keys(override).forEach((key) => {
+    if (
+      typeof output[key] === "object" &&
+      output[key] !== null &&
+      !Array.isArray(output[key])
+    ) {
+      output[key] = { ...output[key], ...override[key] };
+    } else {
+      output[key] = override[key];
+    }
+  });
+  return output;
+}
+
+const HISTORICAL_CONFIG = mergeConfig(
+  HISTORICAL_DEFAULTS,
+  window.HISTORICAL_DATA_CONFIG || {}
+);
+
 function pad2(value) {
   return String(value).padStart(2, "0");
 }
 
 function createDate(year, month, day) {
   return new Date(year, month - 1, day, 12, 0, 0);
+}
+
+function formatDateKey(date) {
+  return `${date.getFullYear()}${pad2(date.getMonth() + 1)}${pad2(date.getDate())}`;
+}
+
+function parseISODate(value) {
+  if (!value) return null;
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  return createDate(parseInt(match[1], 10), parseInt(match[2], 10), parseInt(match[3], 10));
 }
 
 function parseJpMonthDay(value, year) {
@@ -287,6 +353,379 @@ function sortByOrder(values, order) {
   });
 }
 
+function getVizFilterSignature() {
+  const { areas, prefectures, tags, rankingMax, search } = state.filters;
+  const parts = [
+    Array.from(areas).sort().join("|"),
+    Array.from(prefectures).sort().join("|"),
+    Array.from(tags).sort().join("|"),
+    rankingMax,
+    (search || "").toLowerCase(),
+  ];
+  return parts.join("::");
+}
+
+function computeForecastSeries(items) {
+  const dates = state.forecast.dates;
+  const statuses = FORECAST_STATUS_LIST.slice();
+  const statusIndex = new Map(statuses.map((status, idx) => [status, idx]));
+  const counts = statuses.map(() => Array(dates.length).fill(0));
+
+  dates.forEach((date, dayIndex) => {
+    items.forEach((item) => {
+      const status = getStatusForDate(item, date);
+      const idx = statusIndex.has(status)
+        ? statusIndex.get(status)
+        : statusIndex.get("情報なし");
+      counts[idx][dayIndex] += 1;
+    });
+  });
+
+  const totals = dates.map((_, dayIndex) =>
+    counts.reduce((sum, series) => sum + series[dayIndex], 0)
+  );
+
+  return { dates, statuses, counts, totals };
+}
+
+function renderForecastLegend(statuses) {
+  const legend = document.getElementById("forecastLegend");
+  if (!legend) return;
+  legend.innerHTML = "";
+  statuses.forEach((status) => {
+    const item = document.createElement("div");
+    item.className = "viz-legend-item";
+    const swatch = document.createElement("span");
+    swatch.className = "viz-legend-swatch";
+    swatch.style.background = STATUS_COLORS[status] || "#ccc";
+    const label = document.createElement("span");
+    const zh = STATUS_LABELS[status] ? ` - ${STATUS_LABELS[status]}` : "";
+    label.textContent = `${status}${zh}`;
+    item.append(swatch, label);
+    legend.appendChild(item);
+  });
+}
+
+function hexToRgba(hex, alpha) {
+  const value = hex.replace("#", "");
+  if (value.length !== 6) return `rgba(0,0,0,${alpha})`;
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function getTickIndices(length, maxTicks) {
+  if (length <= maxTicks) {
+    return Array.from({ length }, (_, i) => i);
+  }
+  const step = Math.ceil((length - 1) / (maxTicks - 1));
+  const indices = [];
+  for (let i = 0; i < length; i += step) {
+    indices.push(i);
+  }
+  if (indices[indices.length - 1] !== length - 1) {
+    indices.push(length - 1);
+  }
+  return indices;
+}
+
+function drawGridAndYTicks(ctx, maxValue, padding, chartWidth, chartHeight, tickCount) {
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.06)";
+  ctx.lineWidth = 1;
+  ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+  ctx.font = "11px \"Zen Kaku Gothic New\", sans-serif";
+  for (let i = 0; i < tickCount; i += 1) {
+    const value = Math.round((maxValue * (tickCount - 1 - i)) / (tickCount - 1));
+    const y = padding.top + (chartHeight * i) / (tickCount - 1);
+    ctx.beginPath();
+    ctx.moveTo(padding.left, y);
+    ctx.lineTo(padding.left + chartWidth, y);
+    ctx.stroke();
+    ctx.fillText(String(value), 6, y + 4);
+  }
+}
+
+function drawXAxisTicks(ctx, dates, padding, chartWidth, height, maxTicks) {
+  const indices = getTickIndices(dates.length, maxTicks);
+  ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+  ctx.font = "11px \"Zen Kaku Gothic New\", sans-serif";
+  indices.forEach((index) => {
+    const x = padding.left + (chartWidth * index) / (dates.length - 1);
+    const label = formatMonthDay(dates[index]);
+    const textWidth = ctx.measureText(label).width;
+    const xPos = Math.min(
+      Math.max(x - textWidth / 2, padding.left),
+      padding.left + chartWidth - textWidth
+    );
+    ctx.fillText(label, xPos, height - 10);
+  });
+}
+
+function drawTodayMarker(ctx, dates, padding, chartWidth, chartHeight) {
+  const index = Math.min(state.forecast.index, dates.length - 1);
+  const x = padding.left + (chartWidth * index) / (dates.length - 1);
+  ctx.strokeStyle = "rgba(217, 65, 123, 0.8)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x, padding.top);
+  ctx.lineTo(x, padding.top + chartHeight);
+  ctx.stroke();
+  ctx.fillStyle = "rgba(217, 65, 123, 0.9)";
+  ctx.font = "11px \"Zen Kaku Gothic New\", sans-serif";
+  ctx.fillText("今日", x + 4, padding.top + 12);
+}
+
+function drawSmoothLine(ctx, points) {
+  if (points.length < 2) return;
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const midX = (points[i].x + points[i + 1].x) / 2;
+    const midY = (points[i].y + points[i + 1].y) / 2;
+    ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+  }
+  const last = points[points.length - 1];
+  ctx.lineTo(last.x, last.y);
+}
+
+function renderForecastChart() {
+  const canvas = document.getElementById("forecastChart");
+  if (!canvas || !state.viz.series) return;
+  const { dates, statuses, counts, totals } = state.viz.series;
+
+  const width = canvas.clientWidth || 320;
+  const height = canvas.clientHeight || 200;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+
+  const padding = { top: 16, right: 16, bottom: 28, left: 36 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+  const maxTotal = Math.max(...totals, 1);
+
+  const tickCount = Math.min(6, Math.max(4, Math.floor(chartHeight / 40)));
+  drawGridAndYTicks(ctx, maxTotal, padding, chartWidth, chartHeight, tickCount);
+
+  const cumulative = Array(dates.length).fill(0);
+  statuses.forEach((status, statusIndex) => {
+    const series = counts[statusIndex];
+    const next = series.map((value, i) => cumulative[i] + value);
+    ctx.beginPath();
+    series.forEach((_, i) => {
+      const x = padding.left + (chartWidth * i) / (dates.length - 1);
+      const y = padding.top + (1 - next[i] / maxTotal) * chartHeight;
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    });
+    for (let i = dates.length - 1; i >= 0; i -= 1) {
+      const x = padding.left + (chartWidth * i) / (dates.length - 1);
+      const y = padding.top + (1 - cumulative[i] / maxTotal) * chartHeight;
+      ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    const base = STATUS_COLORS[status] || "#ccc";
+    const gradient = ctx.createLinearGradient(0, padding.top, 0, padding.top + chartHeight);
+    gradient.addColorStop(0, hexToRgba(base, 0.85));
+    gradient.addColorStop(1, hexToRgba(base, 0.15));
+    ctx.fillStyle = gradient;
+    ctx.fill();
+    cumulative.forEach((_, i) => {
+      cumulative[i] = next[i];
+    });
+  });
+
+  drawTodayMarker(ctx, dates, padding, chartWidth, chartHeight);
+  drawXAxisTicks(
+    ctx,
+    dates,
+    padding,
+    chartWidth,
+    height,
+    Math.min(8, Math.max(4, Math.floor(chartWidth / 90)))
+  );
+
+  state.viz.layoutStacked = {
+    padding,
+    chartWidth,
+    chartHeight,
+    width,
+    height,
+  };
+}
+
+function renderLineChart() {
+  const canvas = document.getElementById("fullBloomChart");
+  if (!canvas || !state.viz.series) return;
+  const { dates, statuses, counts } = state.viz.series;
+  const maxValue = Math.max(
+    1,
+    ...counts.flatMap((series) => series)
+  );
+
+  const width = canvas.clientWidth || 320;
+  const height = canvas.clientHeight || 200;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+
+  const padding = { top: 16, right: 20, bottom: 28, left: 36 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+
+  const tickCount = Math.min(6, Math.max(4, Math.floor(chartHeight / 40)));
+  drawGridAndYTicks(ctx, maxValue, padding, chartWidth, chartHeight, tickCount);
+
+  statuses.forEach((status, statusIndex) => {
+    const series = counts[statusIndex];
+    const points = series.map((value, i) => {
+      const x = padding.left + (chartWidth * i) / (dates.length - 1);
+      const y = padding.top + (1 - value / maxValue) * chartHeight;
+      return { x, y };
+    });
+    ctx.strokeStyle = STATUS_COLORS[status] || "#ccc";
+    ctx.lineWidth = 2;
+    drawSmoothLine(ctx, points);
+    ctx.stroke();
+  });
+
+  drawTodayMarker(ctx, dates, padding, chartWidth, chartHeight);
+  drawXAxisTicks(
+    ctx,
+    dates,
+    padding,
+    chartWidth,
+    height,
+    Math.min(8, Math.max(4, Math.floor(chartWidth / 90)))
+  );
+
+  state.viz.layoutLine = {
+    padding,
+    chartWidth,
+    chartHeight,
+    width,
+    height,
+  };
+}
+
+function updateForecastChart(force = false) {
+  const signature = getVizFilterSignature();
+  if (force || signature !== state.viz.signature || !state.viz.series) {
+    const items = state.data.filter((item) => matchesFiltersExcept(item, "status"));
+    state.viz.series = computeForecastSeries(items);
+    state.viz.signature = signature;
+    renderForecastLegend(state.viz.series.statuses);
+  }
+  renderForecastChart();
+  renderLineChart();
+}
+
+function updateForecastTooltip(index, x, y) {
+  const tooltip = document.getElementById("forecastTooltip");
+  if (!tooltip || !state.viz.series) return;
+  const { dates, statuses, counts } = state.viz.series;
+  const date = dates[index];
+  if (!date) return;
+  const lines = statuses
+    .map((status, idx) => ({ status, value: counts[idx][index] || 0 }))
+    .filter((item) => item.value > 0);
+  const content = [
+    `<strong>${formatMonthDay(date)}</strong>`,
+    ...lines.map((item) => {
+      const zh = STATUS_LABELS[item.status] ? ` ${STATUS_LABELS[item.status]}` : "";
+      return `${item.status}${zh}: ${item.value}`;
+    }),
+  ];
+  tooltip.innerHTML = content.join("<br>");
+  tooltip.style.left = `${x}px`;
+  tooltip.style.top = `${y}px`;
+  tooltip.classList.add("is-visible");
+  tooltip.setAttribute("aria-hidden", "false");
+}
+
+function hideForecastTooltip() {
+  const tooltip = document.getElementById("forecastTooltip");
+  if (!tooltip) return;
+  tooltip.classList.remove("is-visible");
+  tooltip.setAttribute("aria-hidden", "true");
+}
+
+function setupForecastChartInteractions() {
+  const canvas = document.getElementById("forecastChart");
+  if (!canvas) return;
+  canvas.addEventListener("mousemove", (event) => {
+    if (!state.viz.series || !state.viz.layoutStacked) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const { padding, chartWidth } = state.viz.layoutStacked;
+    const rel = Math.min(Math.max((x - padding.left) / chartWidth, 0), 1);
+    const index = Math.round(rel * (state.viz.series.dates.length - 1));
+    updateForecastTooltip(index, x + 10, y + 10);
+  });
+  canvas.addEventListener("mouseleave", () => {
+    hideForecastTooltip();
+  });
+}
+
+function updateLineTooltip(index, x, y) {
+  const tooltip = document.getElementById("lineTooltip");
+  if (!tooltip || !state.viz.series) return;
+  const { dates, statuses, counts } = state.viz.series;
+  const date = dates[index];
+  if (!date) return;
+  const lines = statuses
+    .map((status, idx) => ({ status, value: counts[idx][index] || 0 }))
+    .filter((item) => item.value > 0);
+  const content = [
+    `<strong>${formatMonthDay(date)}</strong>`,
+    ...lines.map((item) => {
+      const zh = STATUS_LABELS[item.status] ? ` ${STATUS_LABELS[item.status]}` : "";
+      return `${item.status}${zh}: ${item.value}`;
+    }),
+  ];
+  tooltip.innerHTML = content.join("<br>");
+  tooltip.style.left = `${x}px`;
+  tooltip.style.top = `${y}px`;
+  tooltip.classList.add("is-visible");
+  tooltip.setAttribute("aria-hidden", "false");
+}
+
+function hideLineTooltip() {
+  const tooltip = document.getElementById("lineTooltip");
+  if (!tooltip) return;
+  tooltip.classList.remove("is-visible");
+  tooltip.setAttribute("aria-hidden", "true");
+}
+
+function setupLineChartInteractions() {
+  const canvas = document.getElementById("fullBloomChart");
+  if (!canvas) return;
+  canvas.addEventListener("mousemove", (event) => {
+    if (!state.viz.series || !state.viz.layoutLine) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const { padding, chartWidth } = state.viz.layoutLine;
+    const rel = Math.min(Math.max((x - padding.left) / chartWidth, 0), 1);
+    const index = Math.round(rel * (state.viz.series.dates.length - 1));
+    updateLineTooltip(index, x + 10, y + 10);
+  });
+  canvas.addEventListener("mouseleave", () => {
+    hideLineTooltip();
+  });
+}
+
 function initForecast() {
   const { dates, startDate, endDate } = buildForecastDates(state.forecast.year);
   state.forecast.dates = dates;
@@ -313,6 +752,169 @@ function initForecast() {
     });
     state.forecast.index = bestIndex;
   }
+}
+
+function getHistoricalCutoffDate() {
+  if (!HISTORICAL_CONFIG.enabled || HISTORICAL_CONFIG.prefer === "none") return null;
+  if (HISTORICAL_CONFIG.cutoff === "today") {
+    const now = new Date();
+    return createDate(now.getFullYear(), now.getMonth() + 1, now.getDate());
+  }
+  const parsed = parseISODate(HISTORICAL_CONFIG.cutoff);
+  return parsed || null;
+}
+
+function getSpotKey(item) {
+  if (item.source_url) return item.source_url;
+  return `${item.prefecture || ""}::${item.place || ""}`.trim();
+}
+
+function buildSnapshotMap(items) {
+  const map = new Map();
+  items.forEach((item) => {
+    const key = getSpotKey(item);
+    if (!key) return;
+    map.set(key, normalizeStatus(item.status || "情報なし"));
+  });
+  return map;
+}
+
+function parseCSV(text) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    const next = text[i + 1];
+    if (inQuotes) {
+      if (char === '"' && next === '"') {
+        field += '"';
+        i += 1;
+      } else if (char === '"') {
+        inQuotes = false;
+      } else {
+        field += char;
+      }
+    } else if (char === '"') {
+      inQuotes = true;
+    } else if (char === ",") {
+      row.push(field);
+      field = "";
+    } else if (char === "\n") {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else if (char === "\r") {
+      continue;
+    } else {
+      field += char;
+    }
+  }
+  if (field.length || row.length) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows;
+}
+
+function parseCSVObjects(text) {
+  const rows = parseCSV(text);
+  if (!rows.length) return [];
+  const header = rows[0].map((h) =>
+    h.replace(/^\uFEFF/, "").replace(/^"+|"+$/g, "").trim()
+  );
+  return rows.slice(1).map((row) => {
+    const obj = {};
+    header.forEach((key, idx) => {
+      obj[key] = row[idx] || "";
+    });
+    return obj;
+  });
+}
+
+function buildSnapshotPath(template, dateKey) {
+  return template.replace("{date}", dateKey);
+}
+
+async function loadHistoricalSnapshot(date) {
+  const dateKey = typeof date === "string" ? date : formatDateKey(date);
+  if (state.historical.cache.has(dateKey)) return state.historical.cache.get(dateKey);
+  if (state.historical.loading.has(dateKey)) return state.historical.loading.get(dateKey);
+
+  const loader = (async () => {
+    const attempts =
+      HISTORICAL_CONFIG.prefer === "csv"
+        ? ["csv", "json"]
+        : HISTORICAL_CONFIG.prefer === "json"
+        ? ["json", "csv"]
+        : ["json", "csv"];
+    for (const kind of attempts) {
+      const path =
+        kind === "json"
+          ? buildSnapshotPath(HISTORICAL_CONFIG.jsonPath, dateKey)
+          : buildSnapshotPath(HISTORICAL_CONFIG.csvPath, dateKey);
+      try {
+        const res = await fetch(path);
+        if (!res.ok) continue;
+        if (kind === "json") {
+          const items = await res.json();
+          const map = buildSnapshotMap(items);
+          state.historical.cache.set(dateKey, map);
+          return map;
+        }
+        const text = await res.text();
+        const items = parseCSVObjects(text);
+        const map = buildSnapshotMap(items);
+        state.historical.cache.set(dateKey, map);
+        return map;
+      } catch (err) {
+        continue;
+      }
+    }
+    state.historical.cache.set(dateKey, null);
+    return null;
+  })();
+
+  state.historical.loading.set(dateKey, loader);
+  const result = await loader;
+  state.historical.loading.delete(dateKey);
+  return result;
+}
+
+function getHistoricalStatus(item, date) {
+  if (!state.historical.cutoff) return null;
+  if (isAfter(date, state.historical.cutoff)) return null;
+  const dateKey = formatDateKey(date);
+  const cached = state.historical.cache.get(dateKey);
+  if (cached === undefined) {
+    loadHistoricalSnapshot(date).then(() => {
+      updateMarkerIcons();
+      updateForecastChart(true);
+      updateInfoWindow();
+    });
+    return null;
+  }
+  if (!cached) return null;
+  const key = getSpotKey(item);
+  const status = cached.get(key);
+  return status ? normalizeStatus(status) : "情報なし";
+}
+
+function getStatusForDate(item, date) {
+  const historical = getHistoricalStatus(item, date);
+  if (historical !== null) return historical;
+  if (HISTORICAL_CONFIG.fallbackToForecast) {
+    return getForecastStatus(item, date);
+  }
+  return "情報なし";
+}
+
+async function prefetchHistoricalSnapshots() {
+  if (!state.historical.cutoff) return;
+  const targets = state.forecast.dates.filter((date) => !isAfter(date, state.historical.cutoff));
+  await Promise.all(targets.map((date) => loadHistoricalSnapshot(date)));
 }
 
 function getForecastStatus(item, date) {
@@ -348,7 +950,7 @@ function getForecastStatus(item, date) {
 function getDisplayStatus(item) {
   if (state.mode === "forecast") {
     const date = state.forecast.dates[state.forecast.index];
-    if (date) return getForecastStatus(item, date);
+    if (date) return getStatusForDate(item, date);
   }
   return item.status || "情報なし";
 }
@@ -494,6 +1096,7 @@ function applyFilters() {
   countEl.textContent = visibleCount;
 
   updateFilterCounts();
+  updateForecastChart();
 }
 
 function updateFilterCounts() {
@@ -542,6 +1145,8 @@ function updateLegend() {
     label.textContent = date
       ? `予想日 ${formatMonthDay(date)} の状況`
       : "予想アイコン表示";
+  } else if (state.mode === "viz") {
+    label.textContent = "予想分布ビジュアル";
   } else {
     label.textContent = "ステータス別アイコン表示";
   }
@@ -591,6 +1196,32 @@ function setMode(mode) {
   applyFilters();
   updateLegend();
   updateInfoWindow();
+  const mapEl = document.getElementById("map");
+  const vizView = document.getElementById("vizView");
+  const mapOverlay = document.querySelector(".map-overlay");
+  if (state.mode === "viz") {
+    if (mapEl) mapEl.classList.add("is-hidden");
+    if (mapOverlay) mapOverlay.classList.add("is-hidden");
+    if (vizView) {
+      vizView.classList.remove("is-hidden");
+      vizView.setAttribute("aria-hidden", "false");
+    }
+    requestAnimationFrame(() => {
+      updateForecastChart(true);
+    });
+  } else {
+    if (mapEl) mapEl.classList.remove("is-hidden");
+    if (mapOverlay) mapOverlay.classList.remove("is-hidden");
+    if (vizView) {
+      vizView.classList.add("is-hidden");
+      vizView.setAttribute("aria-hidden", "true");
+    }
+    if (state.map && window.google && google.maps) {
+      const center = state.map.getCenter();
+      google.maps.event.trigger(state.map, "resize");
+      if (center) state.map.setCenter(center);
+    }
+  }
 }
 
 function buildInfoContent(item) {
@@ -712,6 +1343,7 @@ function initMap() {
 
 function setupUI() {
   initForecast();
+  state.historical.cutoff = getHistoricalCutoffDate();
 
   const rankingRange = document.getElementById("rankingRange");
   const rankingValue = document.getElementById("rankingValue");
@@ -794,6 +1426,12 @@ function setupUI() {
   updateTabButtons();
   updateForecastUI();
   updateLegend();
+  setupForecastChartInteractions();
+  setupLineChartInteractions();
+  window.addEventListener("resize", () => {
+    renderForecastChart();
+    renderLineChart();
+  });
 }
 
 function loadGoogleMaps() {
@@ -816,5 +1454,7 @@ window.onGoogleMapsLoaded = () => {
 (async function boot() {
   setupUI();
   await loadData();
+  await prefetchHistoricalSnapshots();
+  updateForecastChart(true);
   loadGoogleMaps();
 })();

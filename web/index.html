@@ -35,6 +35,9 @@
             <button class="tab-button" data-mode="forecast" role="tab" aria-selected="false">
               桜レーダー
             </button>
+            <button class="tab-button" data-mode="viz" role="tab" aria-selected="false">
+              予想分布
+            </button>
           </div>
           <div id="forecastControls" class="forecast-controls is-hidden" aria-hidden="true">
             <div class="timeline">
@@ -86,8 +89,6 @@
           </div>
         </details>
 
-
-
         <div class="sidebar__section reset-section">
           <button id="resetFilters" class="reset-button" type="button">リセット</button>
         </div>
@@ -99,6 +100,27 @@
 
       <main class="map-wrapper">
         <div id="map"></div>
+        <div id="vizView" class="viz-view is-hidden" aria-hidden="true">
+          <div class="viz-header">
+            <div>
+              <div class="viz-title">予想分布</div>
+              <div class="viz-subtitle">日別ステータスの推移</div>
+            </div>
+          </div>
+          <div class="viz-grid">
+            <section class="viz-panel-card">
+              <div class="viz-panel-title">ステータス分布（Stacked）</div>
+              <canvas id="forecastChart" width="720" height="260"></canvas>
+              <div id="forecastLegend" class="viz-legend"></div>
+              <div id="forecastTooltip" class="viz-tooltip" aria-hidden="true"></div>
+            </section>
+            <section class="viz-panel-card">
+              <div class="viz-panel-title">ステータス推移（Smooth Lines）</div>
+              <canvas id="fullBloomChart" width="720" height="220"></canvas>
+              <div id="lineTooltip" class="viz-tooltip" aria-hidden="true"></div>
+            </section>
+          </div>
+        </div>
         <div class="map-overlay">
           <div class="legend">
             <span id="legendLabel">ステータス別アイコン表示</span>

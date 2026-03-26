@@ -3,7 +3,11 @@ import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
-
+import datetime
+import os
+import glob
+import shutil
+import csv
 import requests
 
 from sakura_scraper import (
@@ -134,6 +138,12 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    # Generate date-based file paths
+
+    date_str = datetime.datetime.now().strftime('%Y%m%d')
+    csv_path = f'./output/wn_prefecture_spots_{date_str}.csv'
+    json_path = f'../web/data/spots_{date_str}.json'
+
     session = requests.Session()
     if args.no_proxy:
         session.trust_env = False
@@ -237,32 +247,22 @@ def main() -> None:
     if checkpoint_path.exists():
         checkpoint_path.unlink()
 
-
-    import csv, json
-    import datetime
-    import os
-    import glob
-    import shutil
-
-    date_str = datetime.datetime.now().strftime('%Y%m%d')
-    csv_path = f'wn_scraping/output/wn_prefecture_spots_{date_str}.csv'
-    json_path = f'web/data/spots_{date_str}.json'
-
-    rows = []
+    # Convert CSV to JSON with tag_list
+    rows_json = []
     with open(csv_path, encoding='utf-8-sig') as f:
         for row in csv.DictReader(f):
             tag = row.get('tag', '') or ''
             row['tag_list'] = [t.strip() for t in tag.split(',') if t.strip()]
-            rows.append(row)
+            rows_json.append(row)
     with open(json_path, 'w', encoding='utf-8') as f:
-        json.dump(rows, f, ensure_ascii=False)
-    print('wrote', len(rows))
+        json.dump(rows_json, f, ensure_ascii=False)
+    print(f'Wrote {len(rows_json)} rows to {json_path}')
 
     # Update spots.json and previous.json
-    spots_files = sorted(glob.glob('web/data/spots_*.json'), key=os.path.getmtime, reverse=True)
+    spots_files = sorted(glob.glob('../web/data/spots_*.json'), key=os.path.getmtime, reverse=True)
     if len(spots_files) > 1:
-        shutil.copy(spots_files[1], 'web/data/previous.json')
-    shutil.copy(json_path, 'web/data/spots.json')
+        shutil.copy(spots_files[1], '../web/data/previous.json')
+    shutil.copy(json_path, '../web/data/spots.json')
     print('Updated spots.json and previous.json')
 
 
