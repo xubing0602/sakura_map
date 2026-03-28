@@ -343,6 +343,64 @@ body {
   margin-bottom: 10px;
 }
 
+.table-wrap {
+  overflow-x: auto;
+}
+
+.change-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.change-table thead th {
+  text-align: left;
+  font-weight: 600;
+  padding: 10px 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  position: sticky;
+  top: 0;
+  background: #fffdfb;
+  z-index: 1;
+}
+
+.change-table tbody td {
+  padding: 8px;
+  border-bottom: 1px dashed rgba(0, 0, 0, 0.08);
+}
+
+.change-table tbody tr:hover {
+  background: rgba(217, 65, 123, 0.05);
+}
+
+.change-table .delta {
+  font-weight: 700;
+  color: #d9417b;
+}
+
+.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sortable::after {
+  content: "↕";
+  font-size: 11px;
+  margin-left: 6px;
+  color: rgba(0, 0, 0, 0.35);
+}
+
+.sortable.is-asc::after {
+  content: "↑";
+  color: #d9417b;
+}
+
+.sortable.is-desc::after {
+  content: "↓";
+  color: #d9417b;
+}
+
 .viz-note {
   margin-top: 8px;
   font-size: 12px;

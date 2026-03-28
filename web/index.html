@@ -109,15 +109,31 @@
           </div>
           <div class="viz-grid">
             <section class="viz-panel-card">
-              <div class="viz-panel-title">ステータス分布（Stacked）</div>
+              <div class="viz-panel-title">ステータス分布</div>
               <canvas id="forecastChart" width="720" height="260"></canvas>
               <div id="forecastLegend" class="viz-legend"></div>
               <div id="forecastTooltip" class="viz-tooltip" aria-hidden="true"></div>
             </section>
             <section class="viz-panel-card">
-              <div class="viz-panel-title">ステータス推移（Smooth Lines）</div>
+              <div class="viz-panel-title">ステータス推移</div>
               <canvas id="fullBloomChart" width="720" height="220"></canvas>
               <div id="lineTooltip" class="viz-tooltip" aria-hidden="true"></div>
+            </section>
+            <section class="viz-panel-card">
+              <div class="viz-panel-title">満開予想の変更</div>
+              <div class="table-wrap">
+                <table id="changeTable" class="change-table">
+                  <thead>
+                    <tr>
+                      <th data-sort="area" class="sortable">地方</th>
+                      <th data-sort="prefecture" class="sortable">都道府県</th>
+                      <th data-sort="place" class="sortable">名所</th>
+                      <th data-sort="delta" class="sortable is-desc">变化天数</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
             </section>
           </div>
         </div>

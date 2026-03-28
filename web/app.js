@@ -84,6 +84,9 @@ const state = {
   viz: {
     series: null,
     signature: "",
+    changes: [],
+    sort: { key: "delta", dir: "desc" },
+    changesLoaded: false,
   },
   historical: {
     cutoff: null,
@@ -628,6 +631,118 @@ function updateForecastChart(force = false) {
   }
   renderForecastChart();
   renderLineChart();
+}
+
+async function loadChangeTableData() {
+  if (state.viz.changesLoaded) return;
+  try {
+    const res = await fetch("data/previous.json");
+    if (!res.ok) {
+      state.viz.changesLoaded = true;
+      return;
+    }
+    const previousData = await res.json();
+    const year = state.forecast.year;
+    const previousMap = new Map();
+    previousData.forEach((item) => {
+      const full = parseJpMonthDay(item["満開"], year);
+      if (!full) return;
+      const key = getSpotKey(item);
+      if (!key) return;
+      previousMap.set(key, { item, full });
+    });
+
+    const changes = [];
+    state.data.forEach((item) => {
+      const currentFull = parseJpMonthDay(item["満開"], year);
+      if (!currentFull) return;
+      const key = getSpotKey(item);
+      if (!key) return;
+      const prev = previousMap.get(key);
+      if (!prev) return;
+      const deltaDays = Math.round((currentFull.getTime() - prev.full.getTime()) / DAY_MS);
+      if (deltaDays === 0) return;
+      changes.push({
+        area: item.area || "",
+        prefecture: item.prefecture || "",
+        place: item.place || "",
+        delta: deltaDays,
+      });
+    });
+
+    state.viz.changes = changes;
+    state.viz.changesLoaded = true;
+    renderChangeTable();
+  } catch (err) {
+    state.viz.changesLoaded = true;
+  }
+}
+
+function renderChangeTable() {
+  const table = document.getElementById("changeTable");
+  if (!table) return;
+  const tbody = table.querySelector("tbody");
+  if (!tbody) return;
+
+  const { key, dir } = state.viz.sort;
+  const sorted = state.viz.changes.slice().sort((a, b) => {
+    if (key === "delta") {
+      return dir === "asc" ? a.delta - b.delta : b.delta - a.delta;
+    }
+    const av = (a[key] || "").toString();
+    const bv = (b[key] || "").toString();
+    const cmp = av.localeCompare(bv, "ja");
+    return dir === "asc" ? cmp : -cmp;
+  });
+
+  tbody.innerHTML = "";
+  if (!sorted.length) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 4;
+    cell.textContent = "変更はありません";
+    cell.style.color = "rgba(0,0,0,0.5)";
+    cell.style.textAlign = "center";
+    cell.style.padding = "12px 8px";
+    row.appendChild(cell);
+    tbody.appendChild(row);
+    return;
+  }
+
+  sorted.forEach((item) => {
+    const row = document.createElement("tr");
+    const delta = item.delta > 0 ? `+${item.delta}` : `${item.delta}`;
+    row.innerHTML = `
+      <td>${item.area}</td>
+      <td>${item.prefecture}</td>
+      <td>${item.place}</td>
+      <td class="delta">${delta}</td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+function setupChangeTableSorting() {
+  const table = document.getElementById("changeTable");
+  if (!table) return;
+  const headers = table.querySelectorAll("th.sortable");
+  headers.forEach((th) => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.sort;
+      if (!key) return;
+      if (state.viz.sort.key === key) {
+        state.viz.sort.dir = state.viz.sort.dir === "asc" ? "desc" : "asc";
+      } else {
+        state.viz.sort.key = key;
+        state.viz.sort.dir = key === "delta" ? "desc" : "asc";
+      }
+      headers.forEach((header) => {
+        header.classList.remove("is-asc", "is-desc");
+      });
+      th.classList.add(state.viz.sort.dir === "asc" ? "is-asc" : "is-desc");
+      renderChangeTable();
+    });
+  });
 }
 
 function updateForecastTooltip(index, x, y) {
@@ -1428,6 +1543,7 @@ function setupUI() {
   updateLegend();
   setupForecastChartInteractions();
   setupLineChartInteractions();
+  setupChangeTableSorting();
   window.addEventListener("resize", () => {
     renderForecastChart();
     renderLineChart();
@@ -1454,6 +1570,7 @@ window.onGoogleMapsLoaded = () => {
 (async function boot() {
   setupUI();
   await loadData();
+  await loadChangeTableData();
   await prefetchHistoricalSnapshots();
   updateForecastChart(true);
   loadGoogleMaps();
