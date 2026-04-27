@@ -89,7 +89,7 @@ body {
   color: #7a5a40;
   background: rgba(255, 180, 80, 0.14);
   border: 1px solid rgba(200, 130, 50, 0.25);
-  border-radius: 999px;
+  border-radius: 6px;
   letter-spacing: 0.01em;
 }
 
