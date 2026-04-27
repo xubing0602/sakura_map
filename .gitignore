@@ -1,0 +1,15 @@
+# Scraped data outputs
+web/data/spots_*.json
+wn_scraping/output/wn_prefecture_spots_*
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# macOS
+.DS_Store

@@ -10,8 +10,8 @@ import shutil
 import csv
 import requests
 
+from config import REGIONS, SEASON_END
 from sakura_scraper import (
-    REGIONS,
     build_area_list,
     extract_spot_urls,
     fetch_html,
@@ -138,9 +138,8 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    # Generate date-based file paths
-
-    date_str = datetime.datetime.now().strftime('%Y%m%d')
+    now = datetime.datetime.now()
+    date_str = now.strftime('%Y%m%d')
     csv_path = f'./output/wn_prefecture_spots_{date_str}.csv'
     json_path = f'../web/data/spots_{date_str}.json'
 
@@ -258,12 +257,19 @@ def main() -> None:
         json.dump(rows_json, f, ensure_ascii=False)
     print(f'Wrote {len(rows_json)} rows to {json_path}')
 
-    # Update spots.json and previous.json
-    spots_files = sorted(glob.glob('../web/data/spots_*.json'), key=os.path.getmtime, reverse=True)
-    if len(spots_files) > 1:
-        shutil.copy(spots_files[1], '../web/data/previous.json')
-    shutil.copy(json_path, '../web/data/spots.json')
-    print('Updated spots.json and previous.json')
+    # Update spots.json and previous.json — skip after season end
+    if (now.month, now.day) >= SEASON_END:
+        print(
+            f"Season has ended (on or after "
+            f"{SEASON_END[0]:02d}/{SEASON_END[1]:02d}) — "
+            f"skipping spots.json update to preserve demo snapshot."
+        )
+    else:
+        spots_files = sorted(glob.glob('../web/data/spots_*.json'), key=os.path.getmtime, reverse=True)
+        if len(spots_files) > 1:
+            shutil.copy(spots_files[1], '../web/data/previous.json')
+        shutil.copy(json_path, '../web/data/spots.json')
+        print('Updated spots.json and previous.json')
 
 
 if __name__ == "__main__":

@@ -4,7 +4,15 @@ const ICON_PATH = "status_icon/";
 const DEFAULT_CENTER = { lat: 36.5, lng: 138.0 };
 const FORECAST_START = { month: 3, day: 17 };
 const FORECAST_END = { month: 5, day: 24 };
+const OFF_SEASON_AFTER = { month: 5, day: 6 };
+const DEMO_DATE = { month: 4, day: 2 };
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+function isOffSeason(date = new Date()) {
+  const m = date.getMonth() + 1;
+  const d = date.getDate();
+  return m > OFF_SEASON_AFTER.month || (m === OFF_SEASON_AFTER.month && d > OFF_SEASON_AFTER.day);
+}
 
 const STATUS_ICON_MAP = {
   "つぼみ": "含苞.svg",
@@ -841,6 +849,19 @@ function setupLineChartInteractions() {
   });
 }
 
+function findClosestDateIndex(dates, target) {
+  let bestIndex = 0;
+  let bestDiff = Infinity;
+  dates.forEach((date, i) => {
+    const diff = Math.abs(date.getTime() - target.getTime());
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestIndex = i;
+    }
+  });
+  return bestIndex;
+}
+
 function initForecast() {
   const { dates, startDate, endDate } = buildForecastDates(state.forecast.year);
   state.forecast.dates = dates;
@@ -848,6 +869,14 @@ function initForecast() {
   state.forecast.endDate = endDate;
 
   const now = new Date();
+
+  if (isOffSeason(now)) {
+    // Season over — pin the slider and "今日" marker to the demo date (04/02)
+    const demoDate = createDate(state.forecast.year, DEMO_DATE.month, DEMO_DATE.day);
+    state.forecast.index = findClosestDateIndex(dates, demoDate);
+    return;
+  }
+
   const today = createDate(state.forecast.year, now.getMonth() + 1, now.getDate());
 
   if (today <= startDate) {
@@ -855,17 +884,7 @@ function initForecast() {
   } else if (today >= endDate) {
     state.forecast.index = dates.length - 1;
   } else {
-    // Find the closest date index to today
-    let bestIndex = 0;
-    let bestDiff = Infinity;
-    dates.forEach((date, i) => {
-      const diff = Math.abs(date.getTime() - today.getTime());
-      if (diff < bestDiff) {
-        bestDiff = diff;
-        bestIndex = i;
-      }
-    });
-    state.forecast.index = bestIndex;
+    state.forecast.index = findClosestDateIndex(dates, today);
   }
 }
 
@@ -1537,6 +1556,11 @@ function setupUI() {
       setMode(button.dataset.mode || "current");
     });
   });
+
+  const offSeasonNotice = document.getElementById("offSeasonNotice");
+  if (offSeasonNotice && isOffSeason()) {
+    offSeasonNotice.hidden = false;
+  }
 
   updateTabButtons();
   updateForecastUI();

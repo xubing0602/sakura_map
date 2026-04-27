@@ -9,23 +9,7 @@ import requests
 from bs4 import BeautifulSoup
 from bs4.element import NavigableString, Tag
 
-USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/123.0.0.0 Safari/537.36"
-)
-BASE_URL = "https://weathernews.jp"
-
-REGIONS = [
-    "hokkaido",
-    "tohoku",
-    "kanto",
-    "chubu",
-    "kinki",
-    "chugoku",
-    "shikoku",
-    "kyushu",
-]
+from config import BASE_URL, USER_AGENT, REGIONS
 
 
 @dataclass
