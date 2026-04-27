@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## 2026-04-27 (continued)
+
+### Added
+- **Responsive design** (`web/styles.css`, `web/app.js`, `web/index.html`): full mobile/tablet support. On screens ≤ 960 px the sidebar becomes a fixed overlay that slides in from the left; on ≤ 600 px it expands to full viewport width. A semi-transparent backdrop (`#sidebarBackdrop`) dims the map when the sidebar is open and closes it on tap. The sidebar starts collapsed on mobile so the map is visible immediately. `100dvh` replaces `100vh` to handle mobile browser address-bar shrinkage. Touch targets enlarged and paddings tightened at the 600 px breakpoint.
+- **Off-season historical data cap** (`web/app.js`): `getHistoricalCutoffDate()` now returns `DEMO_DATE` (04/02) during off-season instead of today, preventing 404 fetches for snapshot files that don't exist past the demo date.
+
+### Fixed
+- **Backdrop blocking all interactions** (`web/styles.css`): added `pointer-events: none` to `.sidebar-backdrop` so the invisible overlay does not swallow map taps and button clicks when the sidebar is closed.
+- **☰ button overlapping viz-header title** (`web/styles.css`): `#app.sidebar-hidden .viz-header` gets `padding-left: 56px` whenever the show-sidebar button is visible, preventing the title from being hidden behind the button on both mobile and desktop.
+- **`isOffSeason()` month indexing bug** (`web/app.js`): restored `date.getMonth() + 1` so the 1-indexed `OFF_SEASON_AFTER.month` constant is compared correctly (plain `getMonth()` returns 0-indexed April = 3, which never matched `month: 4`).
+
 ## 2026-04-27
 
 ### Added

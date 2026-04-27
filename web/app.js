@@ -4,7 +4,7 @@ const ICON_PATH = "status_icon/";
 const DEFAULT_CENTER = { lat: 36.5, lng: 138.0 };
 const FORECAST_START = { month: 3, day: 17 };
 const FORECAST_END = { month: 5, day: 24 };
-const OFF_SEASON_AFTER = { month: 5, day: 6 };
+const OFF_SEASON_AFTER = { month: 4, day: 26 };
 const DEMO_DATE = { month: 4, day: 2 };
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -890,6 +890,10 @@ function initForecast() {
 
 function getHistoricalCutoffDate() {
   if (!HISTORICAL_CONFIG.enabled || HISTORICAL_CONFIG.prefer === "none") return null;
+  if (isOffSeason()) {
+    const year = new Date().getFullYear();
+    return createDate(year, DEMO_DATE.month, DEMO_DATE.day);
+  }
   if (HISTORICAL_CONFIG.cutoff === "today") {
     const now = new Date();
     return createDate(now.getFullYear(), now.getMonth() + 1, now.getDate());
@@ -1501,15 +1505,50 @@ function setupUI() {
 
   const showSidebar = document.getElementById("showSidebar");
   const app = document.getElementById("app");
+  const backdrop = document.getElementById("sidebarBackdrop");
 
-  toggleSidebar.addEventListener("click", () => {
-    sidebar.classList.toggle("open");
-    app.classList.toggle("sidebar-hidden", !sidebar.classList.contains("open"));
-  });
+  function isMobileLayout() {
+    return window.matchMedia("(max-width: 960px)").matches;
+  }
 
-  showSidebar.addEventListener("click", () => {
+  function openSidebar() {
     sidebar.classList.add("open");
     app.classList.remove("sidebar-hidden");
+    if (isMobileLayout() && backdrop) backdrop.classList.add("is-visible");
+  }
+
+  function closeSidebar() {
+    sidebar.classList.remove("open");
+    app.classList.add("sidebar-hidden");
+    if (backdrop) backdrop.classList.remove("is-visible");
+  }
+
+  // Start with sidebar closed on mobile/tablet so the map is visible first
+  if (isMobileLayout()) {
+    closeSidebar();
+  }
+
+  toggleSidebar.addEventListener("click", () => {
+    if (sidebar.classList.contains("open")) {
+      closeSidebar();
+    } else {
+      openSidebar();
+    }
+  });
+
+  showSidebar.addEventListener("click", openSidebar);
+
+  if (backdrop) {
+    backdrop.addEventListener("click", closeSidebar);
+  }
+
+  // Re-evaluate sidebar state on resize (e.g. rotation)
+  window.addEventListener("resize", () => {
+    if (!isMobileLayout()) {
+      sidebar.classList.add("open");
+      app.classList.remove("sidebar-hidden");
+      if (backdrop) backdrop.classList.remove("is-visible");
+    }
   });
 
   if (resetFilters) {
